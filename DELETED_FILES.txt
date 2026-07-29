@@ -1,1 +1,1 @@
-no files were deleted relative to BASE_COMMIT — every original file was preserved (modified in place where needed) or left untouched; only new files were added.
+no files were deleted relative to BASE_COMMIT across either round — every original file was preserved (modified in place where needed) or left untouched; only new files were added.

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import type { Allergy, DayPlan, MealSlot, Metrics, PlanMode, PlannerForm } from "@/lib/types";
+import type { Allergy, DayPlan, MealSlot, Metrics, PlannedMeal, PlanMode, PlannerForm } from "@/lib/types";
 import {
   activityOptions,
   allergyOptions,
@@ -14,10 +14,14 @@ import {
 } from "@/lib/food/catalogue";
 import { calculateMetrics, getValidationMessage } from "@/lib/nutrition/formulas";
 import { formatDecimal, formatNumber, toNumber } from "@/lib/nutrition/format";
-import { buildWeeklyPlan, getMeal, substituteMeal } from "@/lib/plan/build";
+import { buildWeeklyPlan, applySubstitution, getMeal, getSubstituteOptions } from "@/lib/plan/build";
 import { buildShoppingList } from "@/lib/plan/shopping";
 import { dayPatternLabel, prepLabel, sleepLabel, waterLabel } from "@/lib/labels";
 import { SafetyAdvisory } from "@/components/SafetyAdvisory";
+import { SubstitutePicker } from "@/components/SubstitutePicker";
+import { SaveSessionControls } from "@/components/SaveSessionControls";
+import { RestoreSessionPrompt } from "@/components/RestoreSessionPrompt";
+import { clearSession, saveSession, type StoredSession } from "@/lib/storage/session";
 
 function BrandMark({ className = "" }: { className?: string }) {
   return (
@@ -86,20 +90,74 @@ export default function DietPlanner() {
   );
   const selectedDay = displayedPlan[activeDay];
 
-  function handleSubstitute(slot: MealSlot, occurrence: number) {
-    setSubstitutions((current) => {
-      const base = current[activeDay] ?? weeklyPlan[activeDay];
-      if (!base) return current;
-      const next = substituteMeal(
-        base,
-        slot,
-        occurrence,
-        activeForm,
-        variationSeed + Object.keys(current).length,
-      );
-      return { ...current, [activeDay]: next };
-    });
+  const [substitutionTarget, setSubstitutionTarget] = useState<{
+    slot: MealSlot;
+    occurrence: number;
+  } | null>(null);
+  const substituteOptions = useMemo(() => {
+    if (!substitutionTarget || !selectedDay) return [];
+    return getSubstituteOptions(
+      selectedDay,
+      substitutionTarget.slot,
+      substitutionTarget.occurrence,
+      activeForm,
+      variationSeed,
+      3,
+    );
+  }, [substitutionTarget, selectedDay, activeForm, variationSeed]);
+
+  function openSubstitutePicker(slot: MealSlot, occurrence: number) {
+    setSubstitutionTarget({ slot, occurrence });
   }
+
+  function applySubstitutionChoice(meal: PlannedMeal) {
+    if (!substitutionTarget || !selectedDay) return;
+    const next = applySubstitution(
+      selectedDay,
+      substitutionTarget.slot,
+      substitutionTarget.occurrence,
+      meal,
+    );
+    setSubstitutions((current) => ({ ...current, [activeDay]: next }));
+    setSubstitutionTarget(null);
+  }
+
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+
+  function handleSaveSession() {
+    const ok = saveSession({
+      form: activeForm,
+      planMode,
+      variationSeed,
+      substitutions,
+    });
+    if (ok) {
+      setSavedAt(new Date().toISOString());
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 3000);
+    }
+  }
+
+  function handleClearSession() {
+    clearSession();
+    setSavedAt(null);
+    setJustSaved(false);
+  }
+
+  function handleRestoreSession(session: StoredSession) {
+    setForm(session.form);
+    setSubmittedForm(session.form);
+    setMetrics(calculateMetrics(session.form));
+    setPlanMode(session.planMode);
+    setVariationSeed(session.variationSeed);
+    setSubstitutions(session.substitutions ?? {});
+    setActiveDay(0);
+    setStep(4);
+    setError("");
+    setSavedAt(session.savedAt);
+  }
+
   const projection = useMemo(() => {
     if (!metrics || !submittedForm) return [];
     const start = toNumber(submittedForm.weight);
@@ -249,6 +307,8 @@ export default function DietPlanner() {
           <span aria-hidden="true">←</span>
         </a>
       </header>
+
+      <RestoreSessionPrompt onRestore={handleRestoreSession} />
 
       <section className="hero" id="top">
         <div className="hero-copy">
@@ -775,6 +835,13 @@ export default function DietPlanner() {
               </div>
             </div>
 
+            <SaveSessionControls
+              onSave={handleSaveSession}
+              onClear={handleClearSession}
+              savedAt={savedAt}
+              justSaved={justSaved}
+            />
+
             <article className="result-block numbers-block">
               <div className="block-heading">
                 <span>۰۱</span>
@@ -1035,7 +1102,7 @@ export default function DietPlanner() {
                           <button
                             type="button"
                             className="substitute-button"
-                            onClick={() => handleSubstitute(meal.slot, occurrence)}
+                            onClick={() => openSubstitutePicker(meal.slot, occurrence)}
                             aria-label={`جایگزینی ${meal.title}`}
                           >
                             جایگزین کن
@@ -1044,6 +1111,14 @@ export default function DietPlanner() {
                       );
                     })}
                   </div>
+
+                  {substitutionTarget && (
+                    <SubstitutePicker
+                      options={substituteOptions}
+                      onSelect={applySubstitutionChoice}
+                      onCancel={() => setSubstitutionTarget(null)}
+                    />
+                  )}
                 </div>
               )}
             </article>
@@ -1101,8 +1176,11 @@ export default function DietPlanner() {
                     >
                       <h4>{group.title}</h4>
                       <ul>
-                        {group.items.map((item) => (
-                          <li key={item}>{item}</li>
+                        {group.entries.map((entry) => (
+                          <li key={entry.name}>
+                            <span>{entry.name}</span>
+                            <small>× {formatNumber(entry.count)}</small>
+                          </li>
                         ))}
                       </ul>
                     </section>

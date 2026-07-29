@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DietPlanner from "@/app/DietPlanner";
+import { defaultForm } from "@/lib/food/catalogue";
 
 function getAgeInput() {
   return screen.getByLabelText("سن به سال") as HTMLInputElement;
@@ -87,38 +88,167 @@ describe("step navigation & validation", () => {
   });
 });
 
-describe("substitution (user story 10)", () => {
-  it("lets the user substitute a meal and shows a different one in that slot", async () => {
+describe("substitution picker (round 2, spec user story 24)", () => {
+  it("opens a picker with ranked alternatives instead of swapping immediately", async () => {
     const user = userEvent.setup();
     render(<DietPlanner />);
     await completeWizard(user);
 
-    const mealArticles = screen.getAllByRole("button", { name: /جایگزینی/ });
-    expect(mealArticles.length).toBeGreaterThan(0);
+    const mealButtons = screen.getAllByRole("button", { name: /جایگزینی/ });
+    expect(mealButtons.length).toBeGreaterThan(0);
+    await user.click(mealButtons[0]);
 
-    const firstButton = mealArticles[0];
-    const originalTitle = firstButton.getAttribute("aria-label");
-    await user.click(firstButton);
+    const dialog = screen.getByRole("dialog", { name: "انتخاب جایگزین وعده" });
+    expect(dialog).toBeInTheDocument();
+    const optionButtons = within(dialog).getAllByRole("button", {
+      name: /انتخاب .+ به‌جای وعده فعلی/,
+    });
+    expect(optionButtons.length).toBeGreaterThan(0);
+    expect(optionButtons.length).toBeLessThanOrEqual(3);
+  });
 
-    // After substitution, at least the aria-label set for meal buttons in
-    // that slot should reflect a (possibly) different title; the day's
-    // totals must still be internally consistent (smoke: no crash, still
-    // renders the results heading).
+  it("applies the chosen option and closes the picker", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await completeWizard(user);
+
+    await user.click(screen.getAllByRole("button", { name: /جایگزینی/ })[0]);
+    const dialog = screen.getByRole("dialog", { name: "انتخاب جایگزین وعده" });
+    const [firstOption] = within(dialog).getAllByRole("button", {
+      name: /انتخاب .+ به‌جای وعده فعلی/,
+    });
+    await user.click(firstOption);
+
+    expect(
+      screen.queryByRole("dialog", { name: "انتخاب جایگزین وعده" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
     ).toBeInTheDocument();
-    expect(originalTitle).toBeTruthy();
+  });
+
+  it("can be cancelled without changing anything", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await completeWizard(user);
+
+    await user.click(screen.getAllByRole("button", { name: /جایگزینی/ })[0]);
+    await user.click(screen.getByRole("button", { name: "انصراف" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "انتخاب جایگزین وعده" }),
+    ).not.toBeInTheDocument();
   });
 });
 
-describe("shopping list disclosure (ADR-0002)", () => {
-  it("shows the grouped-not-quantity-exact note", async () => {
+describe("save / restore session (round 2, spec user stories 25-28)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("does not show a restore prompt when nothing is saved", () => {
+    render(<DietPlanner />);
+    expect(
+      screen.queryByRole("note", { name: "بازیابی برنامه ذخیره‌شده" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves only on an explicit click, with a confirmation message, and can be cleared", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await completeWizard(user);
+
+    expect(window.localStorage.getItem("mizaneh:session:v1")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "ذخیره روی این دستگاه" }));
+    expect(window.localStorage.getItem("mizaneh:session:v1")).not.toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("ذخیره شد");
+
+    await user.click(
+      screen.getByRole("button", { name: "پاک کردن داده‌های ذخیره‌شده" }),
+    );
+    expect(window.localStorage.getItem("mizaneh:session:v1")).toBeNull();
+  });
+
+  it("shows an explicit restore-or-discard prompt for a returning session, never a silent restore", async () => {
+    window.localStorage.setItem(
+      "mizaneh:session:v1",
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        form: { ...defaultForm },
+        planMode: "variety",
+        variationSeed: 7,
+        substitutions: {},
+      }),
+    );
+    render(<DietPlanner />);
+
+    const prompt = await screen.findByRole("note", {
+      name: "بازیابی برنامه ذخیره‌شده",
+    });
+    expect(prompt).toBeInTheDocument();
+    // Not auto-restored: results aren't shown until the user chooses "بله".
+    expect(
+      screen.queryByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("restores the saved plan when the user explicitly confirms", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "mizaneh:session:v1",
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        form: { ...defaultForm },
+        planMode: "variety",
+        variationSeed: 7,
+        substitutions: {},
+      }),
+    );
+    render(<DietPlanner />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "بله، بازیابی کن" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+    ).toBeInTheDocument();
+  });
+
+  it("discards the saved session when the user chooses نه، پاک کن", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "mizaneh:session:v1",
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        form: { ...defaultForm },
+        planMode: "variety",
+        variationSeed: 7,
+        substitutions: {},
+      }),
+    );
+    render(<DietPlanner />);
+
+    await user.click(await screen.findByRole("button", { name: "نه، پاک کن" }));
+    expect(window.localStorage.getItem("mizaneh:session:v1")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("shopping list disclosure (ADR-0002, round 2 frequency count)", () => {
+  it("shows the meal-frequency-count note", async () => {
     const user = userEvent.setup();
     render(<DietPlanner />);
     await completeWizard(user);
 
     expect(
-      screen.getByText(/گروه‌بندی می‌کند؛ مقدار دقیق خرید را نشان نمی‌دهد/),
+      screen.getByText(/چند وعده‌ی این هفته استفاده می‌شود/),
     ).toBeInTheDocument();
   });
 });

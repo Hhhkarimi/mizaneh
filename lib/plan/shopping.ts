@@ -1,8 +1,11 @@
-// Shopping-list aggregation. Extracted verbatim from the original
-// DietPlanner.tsx (same category keyword lists, same grouping/dedup
-// logic). ADR-0002 in docs/adr/ documents why this stays a grouped,
-// qualitative list rather than a quantity-summed one in this pass — the
-// `shoppingListNote` export exists so the UI can say so explicitly.
+// Shopping-list aggregation.
+//
+// Round 1 kept this as a grouped, qualitative list (ADR-0002) rather than
+// a quantity-summed one, because the meal catalogue has no per-ingredient
+// weight data to sum. Round 2 (CONTEXT.md §9.1) upgrades this from a bare
+// alphabetical dedup list to a frequency count — how many meals *this
+// week* use each ingredient — which is a real, exactly-derivable number,
+// rather than inventing gram weights the catalogue doesn't have.
 
 import type { DayPlan, ShoppingGroup } from "@/lib/types";
 
@@ -33,34 +36,42 @@ export function categoryForIngredient(ingredient: string) {
 }
 
 export function buildShoppingGroups(weeklyPlan: DayPlan[]): ShoppingGroup[] {
-  const buckets: Record<string, Set<string>> = {
-    produce: new Set(),
-    protein: new Set(),
-    legume: new Set(),
-    grain: new Set(),
-    fat: new Set(),
-    pantry: new Set(),
+  const buckets: Record<string, Map<string, number>> = {
+    produce: new Map(),
+    protein: new Map(),
+    legume: new Map(),
+    grain: new Map(),
+    fat: new Map(),
+    pantry: new Map(),
   };
 
   weeklyPlan
     .flatMap((day) => day.meals)
     .flatMap((meal) => meal.ingredients)
     .forEach((ingredient) => {
-      buckets[categoryForIngredient(ingredient)].add(ingredient);
+      const bucket = buckets[categoryForIngredient(ingredient)];
+      bucket.set(ingredient, (bucket.get(ingredient) ?? 0) + 1);
     });
 
+  function toGroup(title: string, tone: string, bucket: Map<string, number>): ShoppingGroup {
+    const entries = [...bucket.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return { title, tone, items: entries.map((e) => e.name), entries };
+  }
+
   return [
-    { title: "سبزی و میوه", tone: "lime", items: [...buckets.produce].sort() },
-    { title: "منابع پروتئین", tone: "navy", items: [...buckets.protein].sort() },
-    { title: "حبوبات", tone: "coral", items: [...buckets.legume].sort() },
-    { title: "غلات و نشاسته", tone: "sand", items: [...buckets.grain].sort() },
-    { title: "چربی‌های مفید", tone: "mint", items: [...buckets.fat].sort() },
-    { title: "چاشنی‌های پایه", tone: "sky", items: [...buckets.pantry].sort() },
+    toGroup("سبزی و میوه", "lime", buckets.produce),
+    toGroup("منابع پروتئین", "navy", buckets.protein),
+    toGroup("حبوبات", "coral", buckets.legume),
+    toGroup("غلات و نشاسته", "sand", buckets.grain),
+    toGroup("چربی‌های مفید", "mint", buckets.fat),
+    toGroup("چاشنی‌های پایه", "sky", buckets.pantry),
   ].filter((group) => group.items.length > 0);
 }
 
 export const shoppingListNote =
-  "این فهرست، مواد اولیه‌ی تکراری در هفته را گروه‌بندی می‌کند؛ مقدار دقیق خرید را نشان نمی‌دهد.";
+  "عدد کنار هر مورد یعنی در چند وعده‌ی این هفته استفاده می‌شود؛ مقدار دقیق خرید (وزن یا حجم) را نشان نمی‌دهد.";
 
 export function buildShoppingList(weeklyPlan: DayPlan[]): {
   groups: ShoppingGroup[];

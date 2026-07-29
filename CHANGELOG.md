@@ -1,86 +1,114 @@
-# Changelog — Mizaneh production-readiness audit
+# Changelog — Mizaneh production-readiness audit + fundamental upgrade
 
-Against `BASE_COMMIT` `4a2d747d027ce3e85413a12488009d686e6187b1`. No
-formula constant, meal-catalogue value, or label text was changed —
-verified with a golden-output regression test (see `lib/plan/build.test.ts`
-and `lib/plan/__fixtures__/golden-plan-output.json`).
+Cumulative changes against `BASE_COMMIT` `4a2d747d027ce3e85413a12488009d686e6187b1`
+(the original, untouched repository), covering both work rounds. No
+formula constant, meal-catalogue nutrition value, or existing validation
+gate was changed in either round — verified with a golden-output
+regression test in both rounds.
 
-## Architecture
+## Round 1 — production-readiness audit
 
-- **Split `app/DietPlanner.tsx` (2677 lines) into cohesive modules:**
-  - `lib/types.ts` — shared domain types (single source of truth).
-  - `lib/nutrition/format.ts` — Persian number formatting, digit parsing,
-    rounding.
-  - `lib/nutrition/formulas.ts` — BMR/TDEE/deficit/macro calculations and
-    step validation (existing hard gates for age 18–80 / BMI ≥ 18.5
-    preserved exactly).
-  - `lib/food/catalogue.ts` — the ~40-item meal catalogue and form option
-    lists (previously inline).
-  - `lib/plan/build.ts` — deterministic weekly plan generation
-    (`buildWeeklyPlan`, `hashValue`, scoring) plus new `substituteMeal`.
-  - `lib/plan/shopping.ts` — shopping-list grouping/aggregation, plus new
-    `shoppingListNote` / `buildShoppingList`.
-  - `lib/labels.ts` — enum-to-Persian-label lookups.
-  - `components/SafetyAdvisory.tsx` — new, additive safety/privacy notice.
-  - `app/DietPlanner.tsx` — now UI-only (1345 lines): state, step
-    navigation, validation wiring, rendering.
+### Architecture
+- Split `app/DietPlanner.tsx` (2677 lines) into cohesive modules:
+  `lib/types.ts`, `lib/nutrition/{format,formulas}.ts`,
+  `lib/food/catalogue.ts`, `lib/plan/{build,shopping}.ts`, `lib/labels.ts`,
+  `components/SafetyAdvisory.tsx`. `app/DietPlanner.tsx` reduced to
+  state/navigation/rendering only.
 - Added `.gitignore` (none existed before).
 
-## New behavior
+### New behavior
+- One-time safety/privacy disclosure before step 1 (existing hard
+  validation gates for age 18–80 / BMI ≥ 18.5 preserved unchanged).
+- Meal-level substitution (single automatic swap in this round).
+- Shopping-list grouping with a "grouped, not quantity-exact" disclosure.
+- Accessibility: explicit `aria-label`s on the age/height/weight/
+  target-weight inputs.
 
-- **Safety/privacy disclosure** (ADR-0001): a one-time, dismissible note
-  shown before step 1, stating Mizaneh is an estimate and not medical
-  advice, and that no data leaves the browser. Existing hard validation
-  gates (age 18–80, BMI ≥ 18.5) are unchanged — this closes a real gap
-  (no disclaimer text existed anywhere before) rather than altering
-  working validation.
-- **Meal substitution** (spec user story 10 / ADR-0002): a "جایگزین کن"
-  button on each meal card swaps it for another compatible template in
-  the same slot (same allergy/dislike/style constraints), preserving the
-  slot's target-calorie share and recomputing day totals.
-- **Shopping-list disclosure** (ADR-0002): the shopping list now displays
-  an explicit note that it groups repeated ingredients rather than
-  summing exact purchase quantities.
-- **Accessibility**: explicit `aria-label`s added to the age/height/
-  weight/target-weight inputs (previously relying only on implicit
-  wrapper-`<label>` association).
+### Testing
+- Added Vitest + Testing Library + jsdom (no test tooling existed
+  before). 81 tests: formulas, formatting, plan generation/filtering/
+  determinism, shopping aggregation, step navigation/validation,
+  keyboard nav, safety advisory, privacy/no-persistence, print/export.
 
-## Fixes found during review
+## Round 2 — fundamental upgrade
 
+Four upgrades, chosen and scoped in `CONTEXT.md` §9 (a fifth option —
+hand-authoring gram-level ingredient quantities for ~48 meal templates —
+was explicitly considered and rejected as fabricated precision with no
+nutrition-database backing).
+
+### 1. Shopping list: meal-frequency count
+`lib/plan/shopping.ts`'s `ShoppingGroup` gained `entries: {name, count}[]`
+(alongside the existing `items: string[]`, unchanged for compatibility).
+Each item now shows how many meals that week use it — a real, exactly
+derivable number — instead of a bare alphabetical list. The disclosure
+note was updated to describe this precisely.
+
+### 2. Substitution picker (not a single automatic swap)
+`lib/plan/build.ts` gained `getSubstituteOptions` (top-N ranked
+alternatives, reusing the existing `candidateMeals`/`scoreMeal` logic
+unchanged) and `applySubstitution` (applies a specific chosen option).
+`substituteMeal` (round 1) is now implemented as "apply the first option
+from `getSubstituteOptions`" — same behavior, one shared implementation.
+New `components/SubstitutePicker.tsx` renders the choices as a dialog.
+
+### 3. Opt-in, explicit local save/resume
+New `lib/storage/session.ts` (versioned, defensively-wrapped
+`localStorage` access) and three components:
+- `SaveSessionControls.tsx` — explicit "ذخیره روی این دستگاه" / "پاک
+  کردن داده‌های ذخیره‌شده" controls.
+- `RestoreSessionPrompt.tsx` — reads (never applies) any saved session on
+  mount, and only restores it if the user explicitly clicks "بله،
+  بازیابی کن"; "نه، پاک کن" discards it.
+- `components/SafetyAdvisory.tsx`'s copy was updated in the same change,
+  from an unconditional "nothing is stored" to an accurate "nothing is
+  stored unless you choose to save it, and only on this device" — the
+  old wording would have become false once this feature shipped.
+
+### 4. PWA / offline support
+New `public/sw.js` (network-first with cache fallback — chosen over
+precaching every hashed build asset so a fresh deploy is never masked by
+a stale cached bundle while online) and
+`components/ServiceWorkerRegistration.tsx` (browser-only, production-only
+registration, silently no-ops on any failure).
+
+### Testing (round 2 additions)
+28 further tests: `getSubstituteOptions`/`applySubstitution` behavior and
+parity with round 1's `substituteMeal`, shopping-list frequency-count
+correctness, session save/load/clear/version-mismatch-discard, the
+substitution picker and save/restore UI flows (including "never a silent
+restore" and "zero storage writes without an explicit save click"), and
+service-worker file validity + registration guards. Total: **109 tests**.
+
+### Regression handling
+The golden-output fixture from round 1 recorded round-1's
+`buildShoppingGroups` shape, which round 2 intentionally changed (added
+counts). The regression test was split rather than weakened: metrics and
+meal-selection output are still asserted byte-identical against the
+original pre-refactor implementation; shopping-list *content* (which
+ingredients appear per category — driven by the unchanged meal-selection
+logic) is checked separately against the same fixture, while shape
+equality against the old, now-superseded fixture was dropped for that
+one field only.
+
+## Fixes found during review (either round)
 - A generated `coverage/` directory was briefly linted; excluded via
-  `eslint.config.mjs` and `.gitignore`.
-- The new substitute button's grid placement wasn't accounted for at the
-  680–920px viewport range; the mobile 2-column collapse now starts at
-  920px and both the macros block and the button are explicitly placed
-  in the content column.
+  `eslint.config.mjs` and `.gitignore` (round 1).
+- The substitute button's mobile grid placement wasn't accounted for at
+  the 680–920px range; fixed by moving the 2-column collapse to 920px
+  (round 1).
+- `react-hooks/set-state-in-effect` fired on `RestoreSessionPrompt`'s
+  one-time `localStorage` read; justified and suppressed with a comment,
+  since this is a one-time external-system read that cannot happen during
+  server render (round 2).
+- `SaveSessionControls` briefly hid the clear button for 3 seconds after
+  saving; fixed so both can show at once (round 2).
 
-## Testing
-
-- Added the smallest suitable stack: Vitest + Testing Library + jsdom
-  (no test tooling existed before).
-- 81 tests across 5 files covering: Mifflin–St Jeor/TDEE/deficit
-  safeguards/rounding, invalid & extreme inputs, Persian number
-  formatting, allergy/dietary-style/dislike filtering, deterministic
-  seeded generation (including a golden-output regression test against
-  the pre-refactor implementation), substitution, shopping-list
-  aggregation, step navigation & validation UX, keyboard navigation,
-  the safety advisory, privacy/no-persistence, and print/text export.
-- `npm run test` / `npm run test:coverage` scripts added to `package.json`.
-
-## Documentation added
-
-`CONTEXT.md`, `docs/research.md`, `docs/architecture-assessment.md`,
-`docs/prototype-evaluation.md`, `docs/adr/0001-*.md`,
-`docs/adr/0002-*.md`, `docs/code-review.md`,
-`docs/unresolved-audit-advisory.md`, `docs/agents/*.md`,
-`.scratch/mizaneh-audit/spec.md`, and this changelog/`APPLY.md`/
-`TEST_REPORT.md`.
-
-## Explicitly not changed
-
-- Any nutrition formula, constant, or dataset value (see
-  `docs/research.md` for the verification pass and rationale for keeping
-  each one as-is).
-- Ingredient-level substitution / quantity-summed shopping lists
-  (deferred, see ADR-0002).
-- The client-only, no-backend architecture and its privacy guarantee.
+## Explicitly not changed (either round)
+- Any nutrition formula, constant, or dataset value.
+- The existing hard validation gates (age 18–80, BMI ≥ 18.5).
+- Ingredient-level gram quantities / true quantity-summed shopping lists
+  (deferred in round 1's ADR-0002, explicitly re-considered and rejected
+  again in round 2 — see `CONTEXT.md` §9.1).
+- The client-only, no-backend architecture and its privacy guarantee
+  (strengthened in wording, not weakened, by round 2's opt-in storage).

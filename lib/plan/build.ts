@@ -291,28 +291,56 @@ export function buildWeeklyPlan(
   });
 }
 
+/**
+ * Round 2: applies a specific, already-chosen replacement (e.g. one the
+ * user picked from `getSubstituteOptions`) into a slot/occurrence,
+ * recomputing the day's totals. No ranking happens here — this is the
+ * "apply the choice" half of what `substituteMeal` used to do in one
+ * step; `substituteMeal` itself still exists unchanged for round 1
+ * callers that want the single-automatic-swap behavior.
+ */
+export function applySubstitution(
+  day: DayPlan,
+  slot: MealSlot,
+  occurrence: number,
+  replacement: PlannedMeal,
+): DayPlan {
+  const current = getMeal(day, slot, occurrence);
+  if (!current) return day;
+  const slotIndex = day.meals.findIndex((meal) => meal === current);
+  const meals = day.meals.map((meal, index) =>
+    index === slotIndex ? replacement : meal,
+  );
+  return {
+    ...day,
+    meals,
+    calories: meals.reduce((total, meal) => total + meal.targetCalories, 0),
+    protein: meals.reduce((total, meal) => total + meal.targetProtein, 0),
+    fiber: meals.reduce((total, meal) => total + meal.targetFiber, 0),
+  };
+}
+
 export function getMeal(day: DayPlan, slot: MealSlot, occurrence = 0) {
   return day.meals.filter((meal) => meal.slot === slot)[occurrence];
 }
 
 /**
- * New (spec user story 10): substitute one planned meal for another
- * compatible template in the same slot, honoring the same allergy/
- * dislike/style constraints buildWeeklyPlan already enforces, re-scaled to
- * the same target-calorie share. Excludes the meal currently in that slot
- * so the result is always a genuine swap, and is otherwise deterministic
- * given the same variationSeed (bumped by 1 so a repeated substitution
- * request doesn't loop back to the same alternate every time).
+ * Round 2 (spec user story 24): the ranked list of compatible
+ * alternatives for a given slot occurrence, so the UI can offer a picker
+ * instead of a single automatic swap. Reuses the exact same
+ * `candidateMeals`/`scoreMeal` logic `buildWeeklyPlan`/`substituteMeal`
+ * already use — no new ranking rule was invented for this.
  */
-export function substituteMeal(
+export function getSubstituteOptions(
   day: DayPlan,
   slot: MealSlot,
   occurrence: number,
   form: PlannerForm,
   variationSeed: number,
-): DayPlan {
+  limit = 3,
+) {
   const current = getMeal(day, slot, occurrence);
-  if (!current) return day;
+  if (!current) return [];
 
   const disliked = dislikeTokens(form.dislikes);
   const candidates = candidateMeals({
@@ -324,7 +352,7 @@ export function substituteMeal(
     disliked,
   }).filter((meal) => meal.id !== current.id);
 
-  if (candidates.length === 0) return day;
+  if (candidates.length === 0) return [];
 
   const dayIndex = days.findIndex((d) => d.id === day.id);
   const slotIndex = day.meals.findIndex((meal) => meal === current);
@@ -355,12 +383,33 @@ export function substituteMeal(
       }),
   );
 
-  const replacement = toPlannedMeal(
-    ranked[0],
-    current.displaySlot,
-    current.targetCalories,
+  return ranked.slice(0, limit).map((meal) =>
+    toPlannedMeal(meal, current.displaySlot, current.targetCalories),
   );
+}
 
+/**
+ * Substitute one planned meal for another compatible template in the
+ * same slot, honoring the same allergy/dislike/style constraints
+ * buildWeeklyPlan already enforces, re-scaled to the same target-calorie
+ * share. Round 2 implements this as "apply the top-ranked option from
+ * getSubstituteOptions" — identical behavior/output to round 1, now
+ * sharing one implementation with the new picker instead of two.
+ */
+export function substituteMeal(
+  day: DayPlan,
+  slot: MealSlot,
+  occurrence: number,
+  form: PlannerForm,
+  variationSeed: number,
+): DayPlan {
+  const current = getMeal(day, slot, occurrence);
+  if (!current) return day;
+
+  const [replacement] = getSubstituteOptions(day, slot, occurrence, form, variationSeed, 1);
+  if (!replacement) return day;
+
+  const slotIndex = day.meals.findIndex((meal) => meal === current);
   const meals = day.meals.map((meal, index) =>
     index === slotIndex ? replacement : meal,
   );

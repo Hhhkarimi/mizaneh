@@ -91,8 +91,14 @@ export type DayPlan = {
   fiber: number;
 };
 
+export type ShoppingEntry = {
+  name: string;
+  count: number;
+};
+
 export type ShoppingGroup = {
   title: string;
   tone: string;
   items: string[];
+  entries: ShoppingEntry[];
 };

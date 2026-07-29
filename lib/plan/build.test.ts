@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWeeklyPlan, substituteMeal } from "@/lib/plan/build";
+import { buildWeeklyPlan, getSubstituteOptions, substituteMeal } from "@/lib/plan/build";
 import { buildShoppingGroups } from "@/lib/plan/shopping";
 import { calculateMetrics } from "@/lib/nutrition/formulas";
 import { defaultForm, mealTemplates } from "@/lib/food/catalogue";
@@ -52,7 +52,7 @@ const sampleForms: PlannerForm[] = [
 ];
 
 describe("buildWeeklyPlan — golden-output regression (pre-refactor parity)", () => {
-  it("produces byte-identical output to the pre-refactor implementation across 5 sample forms × 4 plan modes", () => {
+  it("produces byte-identical metrics/plan output to the pre-refactor implementation across 5 sample forms × 4 plan modes", () => {
     const results = sampleForms.map((f) => {
       const metrics = calculateMetrics(f);
       return {
@@ -61,10 +61,36 @@ describe("buildWeeklyPlan — golden-output regression (pre-refactor parity)", (
         planQuick: buildWeeklyPlan(f, metrics, "quick", 7),
         planBatch: buildWeeklyPlan(f, metrics, "batch", 3),
         planProtein: buildWeeklyPlan(f, metrics, "protein", 42),
-        shopping: buildShoppingGroups(buildWeeklyPlan(f, metrics, "variety", 1)),
       };
     });
-    expect(JSON.parse(JSON.stringify(results))).toEqual(goldenFixture);
+    // The golden fixture also recorded `shopping` (round 1's
+    // buildShoppingGroups output). Round 2 intentionally changed
+    // ShoppingGroup's shape (added frequency counts — CONTEXT.md §9.1),
+    // so that field is excluded here; ingredient-content parity (not
+    // shape) is checked separately below instead of asserting exact
+    // shape equality against a now-superseded fixture.
+    const trimmedGolden = (goldenFixture as Array<Record<string, unknown>>).map(
+      ({ metrics, planVariety, planQuick, planBatch, planProtein }) => ({
+        metrics,
+        planVariety,
+        planQuick,
+        planBatch,
+        planProtein,
+      }),
+    );
+    expect(JSON.parse(JSON.stringify(results))).toEqual(trimmedGolden);
+  });
+
+  it("still selects the exact same set of ingredients per shopping category as the pre-refactor fixture (content, not shape)", () => {
+    const golden = goldenFixture as Array<{ shopping: { title: string; items: string[] }[] }>;
+    sampleForms.forEach((f, index) => {
+      const metrics = calculateMetrics(f);
+      const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+      const groups = buildShoppingGroups(plan);
+      expect(groups.map((g) => ({ title: g.title, items: g.items }))).toEqual(
+        golden[index].shopping.map((g) => ({ title: g.title, items: g.items })),
+      );
+    });
   });
 });
 
@@ -161,6 +187,64 @@ describe("buildWeeklyPlan — totals", () => {
       expect(day.protein).toBe(pro);
       expect(day.fiber).toBe(fib);
     }
+  });
+});
+
+describe("getSubstituteOptions (round 2 — substitution picker)", () => {
+  it("returns up to `limit` compatible, distinct alternatives excluding the current meal", () => {
+    const f = form();
+    const metrics = calculateMetrics(f);
+    const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+    const day = plan[0];
+    const current = day.meals.find((m) => m.slot === "lunch")!;
+    const options = getSubstituteOptions(day, "lunch", 0, f, 1, 3);
+
+    expect(options.length).toBeGreaterThan(0);
+    expect(options.length).toBeLessThanOrEqual(3);
+    const ids = options.map((o) => o.id);
+    expect(new Set(ids).size).toBe(ids.length); // distinct
+    expect(ids).not.toContain(current.id);
+  });
+
+  it("respects the same allergy constraint as buildWeeklyPlan/substituteMeal", () => {
+    const f = form({ allergies: ["nuts", "fish"] });
+    const metrics = calculateMetrics(f);
+    const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+    const options = getSubstituteOptions(plan[0], "dinner", 0, f, 1, 3);
+    for (const option of options) {
+      expect(option.allergens).not.toContain("nuts");
+      expect(option.allergens).not.toContain("fish");
+    }
+  });
+
+  it("preserves the original slot's target-calorie share for every option", () => {
+    const f = form();
+    const metrics = calculateMetrics(f);
+    const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+    const day = plan[0];
+    const current = day.meals.find((m) => m.slot === "breakfast")!;
+    const options = getSubstituteOptions(day, "breakfast", 0, f, 1, 3);
+    for (const option of options) {
+      expect(option.targetCalories).toBe(current.targetCalories);
+    }
+  });
+
+  it("substituteMeal picks exactly the first option from getSubstituteOptions (round 1 behavior preserved)", () => {
+    const f = form();
+    const metrics = calculateMetrics(f);
+    const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+    const day = plan[0];
+    const [firstOption] = getSubstituteOptions(day, "dinner", 0, f, 1, 1);
+    const updated = substituteMeal(day, "dinner", 0, f, 1);
+    const replaced = updated.meals.find((m) => m.slot === "dinner")!;
+    expect(replaced.id).toBe(firstOption.id);
+  });
+
+  it("returns an empty list rather than throwing when no alternative exists", () => {
+    const f = form({ allergies: ["gluten", "dairy", "egg", "nuts", "fish"] });
+    const metrics = calculateMetrics(f);
+    const plan = buildWeeklyPlan(f, metrics, "variety", 1);
+    expect(() => getSubstituteOptions(plan[0], "breakfast", 0, f, 1)).not.toThrow();
   });
 });
 

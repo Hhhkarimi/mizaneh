@@ -173,3 +173,57 @@ a standalone ADR.
    this (extract `hashValue` and the ranking function into a tested pure
    module) and add a regression test proving "same inputs + same seed ⇒
    byte-identical plan," not to invent seeding from scratch.
+
+## 9. Round 2 — fundamental upgrade (grill-with-docs / domain-modeling addendum)
+
+Scoped and decided autonomously, per the same "record assumptions, don't
+block on approval" instruction as round 1. Four upgrades were chosen for
+being genuinely load-bearing (not cosmetic) while staying inside what can
+be implemented and tested with real confidence in this pass — explicitly
+rejected a fifth option (see "rejected" below) for being too risky to do
+honestly at this scope.
+
+1. **Shopping list: frequency-count instead of a bare dedup list.**
+   Round 1 already disclosed that the shopping list groups rather than
+   sums exact quantities (ADR-0002). Round 2 makes that grouping
+   information-bearing: each item now shows how many meals *this week*
+   need it (a real, exactly-derivable number), instead of a plain
+   alphabetical list with no quantity signal at all.
+   **Rejected alternative**: restructuring all ~48 meal templates'
+   `ingredients: string[]` into `{ name, qty, unit }[]` to get true
+   gram-level shopping quantities. Rejected because it would mean
+   hand-inventing ~217 individual ingredient-weight estimates with no
+   nutrition-database backing — exactly the kind of fabricated-precision
+   the rest of this project has been careful to avoid (see
+   `docs/research.md`'s stance on not overstating precision). A frequency
+   count is honest about exactly what it is; invented gram weights would
+   not be.
+2. **Substitution becomes a picker (3 ranked alternatives), not a single
+   random swap.** Round 1's "جایگزین کن" replaced a meal with one
+   deterministic alternative. Round 2 shows the top 3 compatible
+   alternatives (reusing the exact same `candidateMeals`/`scoreMeal`
+   logic) and lets the user choose — meaningfully more useful, and no new
+   data or formula risk since it's the same ranking, just surfaced
+   further down the list instead of auto-picking rank 1.
+3. **Opt-in, explicit local save/resume of a session.** This is the one
+   place round 2 touches the privacy promise, so it gets the most care:
+   - Nothing is stored unless the user explicitly clicks "ذخیره روی این
+     دستگاه" (Save on this device) after seeing their plan.
+   - Nothing is ever sent over the network — this remains a `localStorage`
+     write, not a request.
+   - A returning user with saved data sees an explicit prompt to restore
+     or discard it — never a silent auto-restore.
+   - The safety/privacy disclosure copy is updated from an unconditional
+     "nothing is stored" to an accurate "nothing is stored *unless you
+     choose to save it, and even then only on this device*" — the old
+     wording would become false once this feature ships, so it must
+     change alongside the feature, not after.
+4. **PWA / offline support.** The app already has `app/manifest.ts`; round
+   2 adds a service worker so the (fully client-side, no-backend)
+   calculator also works offline and can be installed. Zero conflict with
+   the privacy promise (no new network calls — the opposite, actually:
+   the app becomes less network-dependent).
+
+Formulas, meal-catalogue nutrition values, and the existing hard
+validation gates are **not** touched in round 2, for the same reason as
+round 1 (`docs/research.md` verification stands).
