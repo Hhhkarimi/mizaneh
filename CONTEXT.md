@@ -1,10 +1,11 @@
 # CONTEXT.md — Mizaneh (میزانه)
 
-Status: DRAFT v0.1 — produced during initial audit, before grilling/domain-modeling
-interviews are complete. Everything below is derived from reading the shipped
+Status: HISTORICAL BASELINE + IMPLEMENTATION UPDATE. Sections 1–9 describe the
+original audit and earlier rounds; section 10 is the approved 2026-07-31 state.
+Everything in the historical sections was derived from reading the then-shipped
 code (`app/DietPlanner.tsx`, `app/page.tsx`, `app/layout.tsx`) and the live
 production site, not from an interview with the product owner. Treat numeric
-rules here as "what the code currently does," not yet "what has been
+rules in those sections as "what the code did at that time," not "what is now
 verified against primary sources" — that verification is a separate, later
 step (`research`).
 
@@ -227,3 +228,20 @@ honestly at this scope.
 Formulas, meal-catalogue nutrition values, and the existing hard
 validation gates are **not** touched in round 2, for the same reason as
 round 1 (`docs/research.md` verification stands).
+
+## 10. Approved multi-goal implementation — 2026-07-31
+
+The phase-3 specification was explicitly approved and implemented in phase 4.
+
+Key architecture decisions:
+
+- `Goal` is explicit in `PlannerForm`, `Metrics`, `PlanDocument` and progress proposals.
+- Legacy `mizaneh:session:v1` remains readable; new multi-plan state uses `mizaneh:workspace:v2` and explicit restore.
+- New calculation policies are isolated in `lib/calculations`; legacy calculation remains in `lib/nutrition/formulas.ts` for migration/regression protection.
+- Safety disposition is isolated in `lib/safety/screen.ts` and runs before plan generation.
+- Editing and derived totals are isolated in `lib/plan/editor.ts`; UI must not mutate plan totals directly.
+- Goal switching creates a new plan and archives the current plan instead of changing an existing plan in place.
+- Trend adjustments require at least 5 daily observations across at least 14 days and explicit user acceptance.
+- User-entered food/recipe nutrition remains labelled and compatibility is not assumed.
+
+See `docs/phase-4/` for implementation, code-review and verification details. Full dependency-backed checks are still a release gate because this environment could not install the dependency tree.

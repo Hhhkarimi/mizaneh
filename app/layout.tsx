@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/vazirmatn";
-import "@fontsource-variable/noto-nastaliq-urdu";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
@@ -16,18 +15,20 @@ export const metadata: Metadata = {
     template: "%s | میزانه",
   },
   description:
-    "برنامه غذایی هفتگی متناسب با هدف کاهش وزن، محاسبه انرژی روزانه، پروتئین، فیبر، فهرست خرید و آماده‌سازی وعده‌ها.",
+    "برنامه غذایی هفتگی قابل ویرایش برای کاهش وزن، افزایش حجم عضله و افزایش وزن، همراه با برآورد انرژی، مرزهای ایمنی و پیگیری روند.",
   applicationName: "میزانه",
   keywords: [
     "برنامه غذایی هفتگی",
     "کاهش وزن اصولی",
+    "افزایش حجم عضله",
+    "افزایش وزن سالم",
     "محاسبه کالری روزانه",
     "برنامه غذایی ایرانی",
     "پروتئین و فیبر",
     "فهرست خرید هفتگی",
   ],
-  authors: [{ name: "میزانه" }],
-  creator: "میزانه",
+  authors: [{ name: "Hossein Karimi" }],
+  creator: "Hossein Karimi",
   publisher: "میزانه",
   alternates: {
     canonical: "/",
@@ -58,7 +59,7 @@ export const metadata: Metadata = {
     siteName: "میزانه",
     title: "میزانه؛ برنامه غذایی علمی و هفتگی",
     description:
-      "از محاسبه انرژی تا جدول هفتگی، جایگزین‌ها، فهرست خرید و نقشه آماده‌سازی وعده‌ها.",
+      "سه هدف جدا، برنامهٔ هفتگی قابل ویرایش، جایگزین‌ها، فهرست خرید، غربالگری ایمنی و پیگیری روند.",
     url: siteUrl,
     images: [
       {
@@ -73,7 +74,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "میزانه | برنامه غذایی علمی و هفتگی",
     description:
-      "محاسبه انرژی و ساخت جدول غذایی هفت‌روزه با گزینه‌های متنوع و قابل جایگزینی.",
+      "برنامهٔ غذایی هفت‌روزه برای سه هدف با ویرایش، نسخه‌بندی، غربالگری ایمنی و جایگزینی توضیح‌پذیر.",
     images: ["/og-mizaneh.png"],
   },
   manifest: "/manifest.webmanifest",

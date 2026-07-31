@@ -36,6 +36,16 @@ export function SubstitutePicker({ options, onSelect, onCancel }: SubstitutePick
                 <strong>{option.title}</strong>
                 <span>{option.serving}</span>
                 <em>{formatNumber(option.targetCalories)} کیلوکالری</em>
+                <small className="replacement-class">
+                  {option.replacementClass === "close"
+                    ? "جایگزین نزدیک تغذیه‌ای"
+                    : option.replacementClass === "similar"
+                      ? "جایگزین نسبتاً مشابه"
+                      : option.replacementClass === "preference"
+                        ? "جایگزین براساس سلیقه"
+                        : "از نظر تغذیه‌ای معادل نیست"}
+                </small>
+                {option.replacementReason && <p>{option.replacementReason}</p>}
               </button>
             </li>
           ))}
