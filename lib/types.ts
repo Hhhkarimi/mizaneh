@@ -263,13 +263,32 @@ export type SafetyDisposition =
   | "professional_review_required"
   | "urgent_or_high_priority_assessment";
 
+export type SafetyIssueCategory =
+  | "scope"
+  | "nutrition_risk"
+  | "blood_pressure"
+  | "glycaemia"
+  | "lipids"
+  | "medical_condition";
+
+export type SafetyIssue = {
+  id: string;
+  category: SafetyIssueCategory;
+  severity: Exclude<SafetyDisposition, "ordinary_scope">;
+  title: string;
+  explanation: string;
+  nextStep: string;
+};
+
 export type SafetyScreenResult = {
   disposition: SafetyDisposition;
   blocked: boolean;
+  issues: SafetyIssue[];
+  /** Kept for stored-plan and export compatibility. Prefer issues in new UI. */
   reasons: string[];
   notices: string[];
   evaluatedAt: string;
-  policyId: "safety.screen.v1";
+  policyId: "safety.screen.v2";
 };
 
 export type PlanVersionMetadata = {

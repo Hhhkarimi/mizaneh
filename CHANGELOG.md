@@ -133,3 +133,14 @@ one field only.
 - Removed the temporary production prototype route, removed non-Vazirmatn font use, restored creator attribution and added security headers.
 - Added 59 static test declarations across goal, calculation, safety, editing, trend, storage and UI behavior.
 - Full lint/test/build remains an explicit release gate because dependencies could not be installed in the execution environment; see `docs/phase-4/verification-report.md`.
+
+## Phase 4.1 — health-screen usability correction — 2026-07-31
+
+- Replaced oversized health-card checkboxes with compact disclosure buttons using `aria-expanded` and `aria-pressed`.
+- Corrected the CSS selector that applied a 46px minimum height to native checkboxes.
+- Added a plain-language safety decision panel that separates the reason, explanation and concrete next step.
+- Added structured, versioned safety issues while preserving the legacy `reasons` export field.
+- Improved focus management: a blocked submission scrolls to and focuses the detailed safety explanation.
+- Added responsive two-column health fields, clearer labels, selected-state feedback and visible keyboard focus.
+- Changed the final action label when planning is blocked so users are not told that a plan will be generated.
+- Added regression tests for structured safety messages and health disclosure behavior.

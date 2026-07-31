@@ -404,7 +404,12 @@ export default function DietPlanner() {
     }
     const screening = screenSafety(form);
     if (screening.blocked) {
-      setError(screening.reasons[0] ?? "پیش از ساخت برنامه، بررسی حرفه‌ای لازم است.");
+      setError("برنامه ساخته نشد. دلیل دقیق توقف و اقدام پیشنهادی در بخش «بررسی ایمنی» نمایش داده شده است.");
+      window.setTimeout(() => {
+        const safetyPanel = document.getElementById("safety-screen-result");
+        safetyPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+        safetyPanel?.focus({ preventScroll: true });
+      }, 40);
       return;
     }
 
@@ -1141,7 +1146,13 @@ export default function DietPlanner() {
             )}
           </div>
 
-          <p className="form-error" role="alert" aria-live="polite">
+          {step === 4 && safetyResult.blocked && (
+            <p className="submit-safety-hint">
+              ساخت برنامه فعلاً متوقف است. دکمهٔ زیر شما را به توضیح دلیل و اقدام بعدی در بخش بررسی ایمنی می‌برد؛ پاسخ‌هایتان پاک نمی‌شوند.
+            </p>
+          )}
+
+          <p className="form-error" role="alert" aria-live="assertive">
             {error}
           </p>
 
@@ -1159,7 +1170,13 @@ export default function DietPlanner() {
               </button>
             )}
             <button className="continue-button" type="submit">
-              {step === 4 ? "ساخت برنامه هفتگی" : "ادامه"}
+              {step === 4
+                ? safetyResult.blocked
+                  ? "دیدن دلیل توقف برنامه"
+                  : safetyResult.disposition === "general_support_only"
+                    ? "ساخت برنامهٔ عمومی"
+                    : "ساخت برنامه هفتگی"
+                : "ادامه"}
               <span aria-hidden="true">←</span>
             </button>
           </div>

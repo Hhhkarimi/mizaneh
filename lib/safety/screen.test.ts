@@ -17,6 +17,17 @@ describe("safety screening", () => {
     expect(screenSafety(form({ breastfeeding: true })).blocked).toBe(true);
   });
 
+  it("returns structured plain-language issues with a next step", () => {
+    const result = screenSafety(form({ pregnant: true }));
+    expect(result.policyId).toBe("safety.screen.v2");
+    expect(result.issues[0]).toEqual(expect.objectContaining({
+      category: "scope",
+      title: expect.stringContaining("بارداری"),
+      explanation: expect.any(String),
+      nextStep: expect.any(String),
+    }));
+  });
+
   it("blocks eating-disorder concern without a disclaimer bypass", () => {
     const result = screenSafety(form({ eatingDisorderConcern: true }));
     expect(result.disposition).toBe("professional_review_required");
