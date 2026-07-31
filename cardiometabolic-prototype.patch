@@ -1,0 +1,611 @@
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/MANIFEST.sha256 mizaneh-work/mizaneh-main/MANIFEST.sha256
+--- mizaneh-original/mizaneh-main/MANIFEST.sha256	2026-07-29 07:40:57.000000000 +0000
++++ mizaneh-work/mizaneh-main/MANIFEST.sha256	2026-07-30 20:10:03.866282878 +0000
+@@ -1,6 +1,3 @@
+-9faac86819cb37f047c039352af7469a305d83eebc12e33bc04f924cacc96c59  .gitignore
+-0f7bf2d703df5adb2faac4cfa190c7f14712168e024ad2f94b5bee25f54e0b4e  .scratch/mizaneh-audit/spec-round2.md
+-ea2f261318ce03e02c5abce573628d734f89436cfa2a040e45de4f96a6c6fdb0  .scratch/mizaneh-audit/spec.md
+ 65e186f40ae59d8d6d22aa97e645fa0c79c3f4294d924f29b0770aa24b4bb823  APPLY.md
+ 438d5fd39cb6ed2915157e5d96c577041488156f32a09597fdf135f795471c9e  CHANGELOG.md
+ fa00574058afbc40c7886638b4b2bd45a28e0e406a8f7be377ff829728f6c81a  CONTEXT.md
+@@ -9,8 +6,15 @@
+ f3fc4ce9a509bed1dfa1c5520342718f8eb907de5e3ab8bf84f441fd5ad96a74  TEST_REPORT.md
+ 2f2912e387ccf38779dd773364d0236e868e50ac9f68f64913f88bf28c528c37  app/DietPlanner.test.tsx
+ 9827863f6ebac7972df0024348d5c0e5f2bd292cc08643e6bc25f9837a46db8a  app/DietPlanner.tsx
+-ea6be22e5769b000bf611578352175b8e66ed3b29749c757a398603f26eda346  app/globals.css
++74cff91a28d2be1d34e454642ff318cdfa075e1cafff208e8d95fe1338c2adc7  app/__prototype/goals/GoalPrototype.tsx
++bc03fa538df36d4b77d9f21d5f40565c76775c27bdb05305b0c6359b5da5d3d2  app/__prototype/goals/page.tsx
++a5e83062c8f520c7c0fe1191f92d4b16e76775a7e9cb7087e64c21120c93becf  app/globals.css
+ c46dee7d560b0d4c31c786237cb78c48727117aa11235441cf6012736be891bc  app/layout.tsx
++da41c49235a4f43994ba4bcd639bf02086dc7a9d69d3ccf15ee7df24d0688b53  app/manifest.ts
++37b4e394ecab5d866ea39b7281c482cf353b25477ee73b05dd903c764cf1d709  app/page.tsx
++dda189bfb1b3346a575288fd320a6d6774bbf2e0be54a3d6b0abed81ce8d1abc  app/robots.ts
++61f0760c3693418c56027832ff7d2b4a8641fca9852e8cbaecf51aa1e7849506  app/sitemap.ts
++730b4e7a11fdcb9a50c700f501536323a4e2af0626d6a4b2f6ca722c17ee5fc7  cardiometabolic-prototype.patch
+ 00d3328864c5599486e924c0332f3a5cee563227f9f1092e039b8ce412351bcc  changes.patch
+ fa01398d1292add51cd4e854ec38d473f31dcb5d0dd084fa14bba0860d3d543a  components/RestoreSessionPrompt.tsx
+ aa7d494870f805e0dddbd0dc01fca9172de48b4a6397b79c57de81760d8ee49e  components/SafetyAdvisory.tsx
+@@ -25,6 +29,20 @@
+ 4876e68ea39dd765b1cf8e825cfaf77a33945a3bc8ef1d3f3a3b7dd59fe5095c  docs/architecture-assessment.md
+ 4193d7919be4509d0de5963fb219b18756b862283d3f0a7178a086ed5368451a  docs/code-review-round2.md
+ bb9eafd8a8c3e7662644b5b6b51f14362102a94079ed2de25bb57f5013112eff  docs/code-review.md
++c2765816c3363f96a8bb88e6f29323cfd62b7e16bf2aaa9a68cb0f531a48fb4e  docs/phase-1/README.md
++d683f8f1c9b06cfddd7cd6c01f3f4527c18351906d18b87d4ededa272b679639  docs/phase-1/calculation-source-registry.md
++4827cf70cd2da5c8a33c33c5f70418fb8cb7bf3f356a2db8f039ddd93e7c7691  docs/phase-1/cardiometabolic-research-addendum.md
++2fbbcb45224f5cb6cad7853d99bfcdcde3ba0ae75692e62bb35df193200e35cf  docs/phase-1/current-product-investigation.md
++4df215f7d2d7572bb183b054bdffb64ad085863d156e7900a2a51cb908155484  docs/phase-1/evidence-matrix.csv
++d18cf143af029271ab6fb5c01e7de4cdf95eff85d095433716038b6707388b92  docs/phase-1/prototype-brief.md
++6286950649f8bd734278868849568df9a11f985745ea94cb962c92f327703208  docs/phase-1/research-update-policy.md
++cb071046b8f19cf29ae267ec3c92fb32012f0c85bd764b59e62a6d8a82325d99  docs/phase-1/safety-exclusion-list.md
++3807fcd8552cb0b6bbc50e62884164edbe5bb12aba473a0d0cc7340abcb5c348  docs/phase-1/scientific-research-report.md
++451753c3ad7954e44771af5edef7d88ddabf3d831b0972a724c7529d6f2d82ac  docs/phase-1/scientific-uncertainty-register.md
++ffc7e7fd7b802b5c50988b8f01c57a7b44b5c663cace833a6e4b5e21bc656630  docs/phase-1/verification-report.md
++878e9cfb3941e22f87a6dcc16269c8e7b059bb70a9c9e6951e349e743cb74cc4  docs/phase-2/cardiometabolic-prototype-evaluation.md
++1f4486661c92cfecff3a727b1b4e3c375c9e9e5b665232f09e2190f2a54c9802  docs/phase-2/change-summary.md
++576bb5bc88ac2d042babb1ecdf0dc1f23df45fc0b70219be3ed7ba0cc68d422a  docs/phase-2/verification-report.md
+ 1d6d10f94377325ebbfda593a4d4519323475bbd6a938a2092e6884f73fac007  docs/prototype-evaluation.md
+ 5003937a059dd17e2de4c2830052212cec838289b06fab9dae8676c2ab751901  docs/research.md
+ 3b6fa44cec48a1bd0726f7590f71388c31e74adc178c6ff26bba1e2369c5ca1f  docs/unresolved-audit-advisory.md
+@@ -43,8 +61,13 @@
+ 9fb3146253decc47f32e1455a026807b47ee1e0bbbffb437c64e80bfb5af99c3  lib/storage/session.test.ts
+ b06c21373af8e25490e5035c62f59647873b135cdf3fd73f571c970316344b56  lib/storage/session.ts
+ 91b14c41a536ee823ed61963f7723b5f663e80bfa8f36faff85a4e8e24ea6a2c  lib/types.ts
++3a0f12afd362b3efc3661e5377396cba4b4081ae3e7c306911cd0181a496d3a3  next.config.ts
+ 99d9ba91c0205f5a4f9d4338d91e40f03d8b4ec6bf1893ea3f0961bb27de8ea3  package-lock.json
+ c204f73a05aaf17572bce3e8b28cc5ede677ac8ac45a4ce16a91eb66d2889bbb  package.json
++6e1e8bfb41534978fd78cbd94742b43c1bc9a5720567cff00e7a5767d762b978  public/favicon.svg
++74248aeeb91da4c626a03f59eef31bb5a1a21e70dc60ecffb5f3555d1bdda87d  public/og-mizaneh.png
+ 60a0c6856bbf43b44eabac476edcdf95ef19ea338f489a123127363defa83e54  public/sw.js
++e6c606908453001699c97b260df2b41e6b26a64e937aafa2a73fcc5ce16fd5a6  tsconfig.json
++6e99b80c703b0a46ae0b2972a42ba3242231b2f565db0299c511979717240621  vercel.json
+ 3447dc2de5664b88da8067ffa7e024206cdcf9dca00ff711653ec4cdcf96f8de  vitest.config.ts
+ d357c8730c8ced4a54857b9abb2bab4903a5d60780ef2f2a2428c92cdcf4b43b  vitest.setup.ts
+Only in mizaneh-work/mizaneh-main/app: __prototype
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/app/globals.css mizaneh-work/mizaneh-main/app/globals.css
+--- mizaneh-original/mizaneh-main/app/globals.css	2026-07-29 07:40:57.000000000 +0000
++++ mizaneh-work/mizaneh-main/app/globals.css	2026-07-30 20:06:47.182282878 +0000
+@@ -2213,3 +2213,434 @@
+     min-width: 0;
+   }
+ }
++
++/* Disposable goal + cardiometabolic prototype. This route is non-indexed and
++   intentionally does not alter the production planner. */
++.prototype-shell {
++  min-height: 100vh;
++  padding-bottom: 80px;
++}
++
++.prototype-topbar {
++  align-items: center;
++  background: rgba(246, 241, 231, 0.94);
++  border-bottom: 1px solid var(--line);
++  display: flex;
++  justify-content: space-between;
++  padding: 18px clamp(22px, 5vw, 76px);
++  position: sticky;
++  top: 0;
++  z-index: 20;
++}
++
++.prototype-brand-mark {
++  align-items: center;
++  background: var(--ink);
++  border-radius: 50%;
++  color: white;
++  display: inline-flex;
++  font-size: 1.2rem;
++  font-variation-settings: "wght" 850;
++  height: 46px;
++  justify-content: center;
++  width: 46px;
++}
++
++.prototype-intro,
++.prototype-layout,
++.prototype-health-section,
++.prototype-sources {
++  margin-inline: auto;
++  max-width: 1180px;
++  padding-inline: clamp(18px, 4vw, 44px);
++}
++
++.prototype-intro {
++  padding-top: 70px;
++  text-align: center;
++}
++
++.prototype-intro h1 {
++  font-size: clamp(2.3rem, 6vw, 5rem);
++  letter-spacing: -0.055em;
++  line-height: 1.12;
++  margin-bottom: 18px;
++}
++
++.prototype-intro > p:not(.eyebrow) {
++  color: var(--muted);
++  margin-inline: auto;
++  max-width: 720px;
++}
++
++.prototype-variant-tabs {
++  display: grid;
++  gap: 10px;
++  grid-template-columns: repeat(3, 1fr);
++  margin-top: 32px;
++}
++
++.prototype-variant-tabs a {
++  background: var(--paper-2);
++  border: 1px solid var(--line);
++  border-radius: 999px;
++  padding: 10px 16px;
++}
++
++.prototype-variant-tabs a[aria-current="page"] {
++  background: var(--ink);
++  color: white;
++}
++
++.prototype-layout {
++  align-items: start;
++  display: grid;
++  gap: 24px;
++  grid-template-columns: minmax(0, 1fr) 280px;
++  margin-top: 34px;
++}
++
++.prototype-card {
++  width: 100%;
++}
++
++.prototype-tradeoff-card {
++  background: var(--coral-soft);
++  border: 1px solid var(--line);
++  border-radius: var(--radius-lg);
++  padding: 24px;
++  position: sticky;
++  top: 108px;
++}
++
++.prototype-tradeoff-card > span,
++.prototype-support-grid article > span,
++.prototype-health-result > span,
++.prototype-selection-summary > span,
++.prototype-recommendation > span {
++  color: var(--muted);
++  display: block;
++  font-size: 0.78rem;
++  margin-bottom: 7px;
++}
++
++.prototype-extended-selector {
++  display: grid;
++  gap: 10px;
++}
++
++.prototype-extended-selector button {
++  background: var(--paper);
++  border: 1px solid var(--line);
++  border-radius: var(--radius-md);
++  display: grid;
++  gap: 3px;
++  padding: 16px 18px;
++  text-align: right;
++}
++
++.prototype-extended-selector button span {
++  color: var(--muted);
++  font-size: 0.87rem;
++}
++
++.prototype-extended-selector button.is-selected,
++.prototype-manual-goals button.is-selected {
++  background: var(--lime-soft);
++  border-color: var(--ink);
++}
++
++.prototype-goal-cards {
++  display: grid;
++  gap: 12px;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++}
++
++.prototype-goal-cards article {
++  background: var(--paper);
++  border: 1px solid var(--line);
++  border-radius: var(--radius-md);
++  display: flex;
++  flex-direction: column;
++  padding: 18px;
++}
++
++.prototype-goal-cards article.is-selected {
++  background: var(--lime-soft);
++  border-color: var(--ink);
++}
++
++.prototype-goal-index {
++  color: var(--coral);
++  font-variation-settings: "wght" 800;
++}
++
++.prototype-goal-cards h3 {
++  margin: 8px 0 7px;
++}
++
++.prototype-goal-cards p,
++.prototype-goal-cards dd {
++  color: var(--muted);
++  font-size: 0.8rem;
++}
++
++.prototype-goal-cards dl {
++  display: grid;
++  gap: 10px;
++  margin: 10px 0 18px;
++}
++
++.prototype-goal-cards dl div {
++  border-top: 1px solid var(--line);
++  padding-top: 8px;
++}
++
++.prototype-goal-cards dt {
++  font-size: 0.74rem;
++  font-variation-settings: "wght" 750;
++}
++
++.prototype-goal-cards dd {
++  margin: 2px 0 0;
++}
++
++.prototype-goal-cards button,
++.prototype-manual-goals button {
++  background: var(--paper-2);
++  border: 1px solid var(--line);
++  border-radius: 999px;
++  margin-top: auto;
++  padding: 8px 12px;
++}
++
++.prototype-guided {
++  display: grid;
++  gap: 18px;
++}
++
++.prototype-recommendation,
++.prototype-selection-summary {
++  background: var(--blue-soft);
++  border: 1px solid var(--line);
++  border-radius: var(--radius-md);
++  padding: 16px 18px;
++}
++
++.prototype-recommendation strong,
++.prototype-selection-summary strong {
++  display: block;
++  font-size: 1.25rem;
++}
++
++.prototype-recommendation p,
++.prototype-selection-summary p {
++  color: var(--muted);
++  margin: 4px 0 0;
++}
++
++.prototype-manual-goals {
++  display: grid;
++  gap: 8px;
++  grid-template-columns: repeat(3, 1fr);
++}
++
++.prototype-selection-summary {
++  background: var(--paper-2);
++  margin-top: 20px;
++}
++
++.prototype-health-section {
++  background: var(--ink);
++  border-radius: var(--radius-xl);
++  color: var(--paper-2);
++  margin-top: 52px;
++  padding-block: 38px;
++}
++
++.prototype-health-section > header {
++  align-items: end;
++  display: flex;
++  gap: 30px;
++  justify-content: space-between;
++  margin-bottom: 26px;
++}
++
++.prototype-health-section > header p {
++  color: rgba(255, 255, 255, 0.7);
++  margin: 0;
++  max-width: 480px;
++}
++
++.prototype-health-grid {
++  display: grid;
++  gap: 14px;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++}
++
++.prototype-health-card {
++  background: var(--paper-2);
++  border: 1px solid rgba(255, 255, 255, 0.15);
++  border-radius: var(--radius-lg);
++  color: var(--ink);
++  margin: 0;
++  padding: 20px;
++}
++
++.prototype-health-card legend {
++  font-variation-settings: "wght" 800;
++  padding-inline: 5px;
++}
++
++.prototype-health-card > label:not(.prototype-toggle) {
++  display: grid;
++  gap: 7px;
++  margin-top: 12px;
++}
++
++.prototype-check-grid {
++  display: grid;
++  gap: 8px;
++  grid-template-columns: repeat(2, 1fr);
++}
++
++.prototype-toggle {
++  align-items: start;
++  display: flex;
++  gap: 9px;
++  margin-top: 12px;
++}
++
++.prototype-toggle input {
++  margin-top: 7px;
++}
++
++.prototype-field-note {
++  background: var(--blue-soft);
++  border-radius: 12px;
++  color: var(--ink-2);
++  font-size: 0.8rem;
++  margin: 14px 0 0;
++  padding: 10px 12px;
++}
++
++.prototype-health-result {
++  border: 1px solid rgba(255, 255, 255, 0.22);
++  border-radius: var(--radius-lg);
++  margin-top: 16px;
++  padding: 20px;
++}
++
++.prototype-health-result strong {
++  display: block;
++  font-size: 1.35rem;
++}
++
++.prototype-health-result p {
++  margin: 4px 0 0;
++}
++
++.prototype-health-result.is-ordinary { background: rgba(184, 219, 120, 0.18); }
++.prototype-health-result.is-support { background: rgba(220, 236, 235, 0.18); }
++.prototype-health-result.is-review { background: rgba(255, 230, 223, 0.17); }
++.prototype-health-result.is-priority,
++.prototype-health-result.is-urgent { background: rgba(255, 113, 91, 0.2); }
++
++.prototype-support-grid {
++  display: grid;
++  gap: 14px;
++  grid-template-columns: repeat(3, 1fr);
++  margin-top: 18px;
++}
++
++.prototype-support-grid article {
++  background: var(--paper-2);
++  border-radius: var(--radius-lg);
++  color: var(--ink);
++  padding: 20px;
++}
++
++.prototype-support-grid h3 {
++  font-size: 1rem;
++  margin-bottom: 8px;
++}
++
++.prototype-support-grid p {
++  color: var(--muted);
++  font-size: 0.82rem;
++  margin: 0;
++}
++
++.prototype-data-warning {
++  background: var(--coral-soft);
++  border-radius: var(--radius-md);
++  color: var(--ink);
++  margin-top: 18px;
++  padding: 16px 18px;
++}
++
++.prototype-data-warning p {
++  margin: 5px 0 0;
++}
++
++.prototype-sources {
++  margin-top: 50px;
++}
++
++.prototype-sources ul {
++  display: grid;
++  gap: 8px;
++  padding-right: 20px;
++}
++
++.prototype-sources p {
++  color: var(--muted);
++}
++
++@media (max-width: 940px) {
++  .prototype-layout,
++  .prototype-health-grid {
++    grid-template-columns: 1fr;
++  }
++
++  .prototype-tradeoff-card {
++    position: static;
++  }
++
++  .prototype-goal-cards,
++  .prototype-support-grid {
++    grid-template-columns: 1fr;
++  }
++
++  .prototype-health-section > header {
++    align-items: start;
++    flex-direction: column;
++  }
++}
++
++@media (max-width: 680px) {
++  .prototype-topbar {
++    padding: 12px 16px;
++  }
++
++  .prototype-topbar .header-action {
++    font-size: 0.76rem;
++    padding-inline: 14px;
++  }
++
++  .prototype-variant-tabs,
++  .prototype-manual-goals,
++  .prototype-check-grid {
++    grid-template-columns: 1fr;
++  }
++
++  .prototype-intro {
++    padding-top: 42px;
++  }
++
++  .prototype-health-section {
++    border-radius: 24px;
++    margin-inline: 12px;
++    padding-inline: 14px;
++  }
++}
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/docs/phase-1/README.md mizaneh-work/mizaneh-main/docs/phase-1/README.md
+--- mizaneh-original/mizaneh-main/docs/phase-1/README.md	2026-07-30 19:52:17.000000000 +0000
++++ mizaneh-work/mizaneh-main/docs/phase-1/README.md	2026-07-30 20:03:47.722282878 +0000
+@@ -1,6 +1,6 @@
+ # Phase 1 Review Package — Mizaneh Goal Expansion
+ 
+-Status: **REVIEW REQUIRED — NO PRODUCTION IMPLEMENTATION AUTHORIZED**  
++Status: **SCIENTIFIC REVIEW APPROVED — DISPOSABLE PROTOTYPE AUTHORIZED — NO PRODUCTION IMPLEMENTATION AUTHORIZED**  
+ Prepared: 2026-07-30
+ 
+ This package records the repository/product investigation and the first evidence review for extending Mizaneh from one weight-loss workflow to three explicit goals:
+@@ -22,15 +22,15 @@
+ - `research-update-policy.md` — source hierarchy, expiry, and update process.
+ - `prototype-brief.md` — three disposable UI variants and targeted editing prototypes; no variant is selected.
+ - `verification-report.md` — checks completed and checks blocked by the environment.
++- `cardiometabolic-research-addendum.md` — approved scientific scope for blood pressure, glycaemia, and blood lipids.
+ 
+ ## Review gates
+ 
+ Implementation must not begin until all of the following are explicitly approved:
+ 
+-1. scientific recommendations and unresolved numerical policies;
+-2. automated-scope exclusions;
+-3. one goal-selection prototype direction;
+-4. a subsequent complete product specification.
++1. scientific recommendations and automated-scope exclusions — **approved 2026-07-30**, including the cardiometabolic addendum;
++2. one goal-selection prototype direction — **pending selection**;
++3. a subsequent complete product specification — **pending**.
+ 
+ ## Important repository conflict
+ 
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/docs/phase-1/calculation-source-registry.md mizaneh-work/mizaneh-main/docs/phase-1/calculation-source-registry.md
+--- mizaneh-original/mizaneh-main/docs/phase-1/calculation-source-registry.md	2026-07-30 19:52:17.000000000 +0000
++++ mizaneh-work/mizaneh-main/docs/phase-1/calculation-source-registry.md	2026-07-30 20:03:45.718282878 +0000
+@@ -39,3 +39,18 @@
+ - safety-screen result
+ - target ranges rather than only point targets
+ - plan version and parent-plan ID
++
++## Cardiometabolic safety and interpretation registry — added 2026-07-30
++
++| Policy ID | Rule | Domain | Population | Source | Evidence strength | Limitations | Product status | Review expiry |
++|---|---|---|---|---|---|---|---|---|
++| `bp.measurement.context.v1` | Never diagnose from one reading; store setting, device, repetition, date, and symptoms | blood pressure | nonpregnant adults | WHO hypertension 2025; AHA/ACC 2025 | high | WHO and AHA/ACC classification thresholds differ | approved safety/data rule | 2027-07-30 |
++| `bp.severe.v1` | `systolic > 180 OR diastolic > 120` blocks ordinary planning; symptoms select emergency pathway | blood pressure | nonpregnant adults | AHA/ACC 2025 | high | measurement error and symptom context matter | approved safety rule | 2027-07-30 |
++| `sodium.who.v1` | population guidance `<2000 mg sodium/day` (`<5 g salt/day`) | blood pressure/shared | adults | WHO sodium reduction 2026 | high | not an individual therapeutic target; current food data lacks sodium | approved reference; blocked for exact calculation | 2028-05-11 |
++| `glucose.prediabetes.reference.v1` | A1C 5.7–6.4%; FPG 100–125 mg/dL; 2-h OGTT 140–199 mg/dL | glycaemia | nonpregnant adults | ADA Standards 2026 | high | reference only; laboratory methods and confirmation matter | approved educational reference; no diagnosis | 2026-12-31 |
++| `glucose.hypoglycaemia.v1` | `<70 mg/dL` clinically important; `<54 mg/dL` level 2 | glycaemia | adults | ADA Standards 2026 | high | medication, symptoms, and device accuracy matter | approved safety rule | 2026-12-31 |
++| `glycaemia.macro.individualise.v1` | no universal carbohydrate/protein/fat percentage | glycaemia | adults at risk for or living with diabetes | ADA Standards 2026 | high | medical nutrition therapy is individualised | approved product constraint | 2026-12-31 |
++| `lipid.targets.riskbased.v1` | do not assign a universal LDL-C target; targets depend on ASCVD risk and clinical context | lipids | adults | ACC/AHA multisociety dyslipidaemia guideline 2026 | high | risk calculators need validated implementation and additional data | approved product constraint | 2027-07-30 |
++| `triglyceride.review.v1` | `TG >=500 mg/dL` requires professional review and blocks ordinary planning | lipids | adults | ACC/AHA multisociety dyslipidaemia guideline 2026 | high | fasting status and secondary causes require clinical assessment | approved safety rule | 2027-07-30 |
++| `triglyceride.priority.v1` | `TG >=1000 mg/dL` selects high-priority clinical assessment due to pancreatitis risk | lipids | adults | ACC/AHA multisociety dyslipidaemia guideline 2026 | high | not a diagnosis or medication recommendation | approved safety rule | 2027-07-30 |
++| `cardiometabolic.pattern.v1` | vegetables/fruits, whole grains, legumes, appropriate proteins, unsaturated over saturated fats, low sodium/added sugar/UPF | shared cardiometabolic support | general adults | AHA dietary guidance 2026; ADA 2026; WHO 2026 | high | must remain culturally adaptable; not disease-specific MNT | approved qualitative policy | 2028-03-31 |
+Only in mizaneh-work/mizaneh-main/docs/phase-1: cardiometabolic-research-addendum.md
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/docs/phase-1/evidence-matrix.csv mizaneh-work/mizaneh-main/docs/phase-1/evidence-matrix.csv
+--- mizaneh-original/mizaneh-main/docs/phase-1/evidence-matrix.csv	2026-07-30 19:52:17.000000000 +0000
++++ mizaneh-work/mizaneh-main/docs/phase-1/evidence-matrix.csv	2026-07-30 20:03:45.726282878 +0000
+@@ -17,3 +17,12 @@
+ "Food composition must distinguish raw/cooked data, yields, retention and provenance","all","food-data and recipe systems","FAO/INFOODS Food Composition Data","2003 plus maintained INFOODS resources","international technical standard","high","National data access/licensing varies","Create structured provenance-aware food and recipe model","2027-07-30"
+ "Iranian foods should preferentially use a national table when licensing and data access permit","all","Iranian food context","FAO listing: Iranian Food Composition Table 2017","2017","national food-composition table listing","moderate","Restricted access and licence not yet verified","Do not copy values until rights and source fields are confirmed","2027-07-30"
+ "Supplements are optional and require assessment; contamination and harm are real risks","muscle_gain","athletes/exercising adults","IOC consensus PMID 29540367","2018","consensus statement","high","Elite-sport framing; general users still share product-quality risks","Keep supplements separate and non-mandatory","2027-07-30"
++"A single blood-pressure reading must not be used by the product to diagnose hypertension","all","nonpregnant adults","WHO Hypertension 2025; AHA/ACC High Blood Pressure Guideline 2025","2025","global fact sheet and clinical guideline","high","Classification thresholds differ and measurement context matters","Collect repeated-reading context and show no diagnosis","2027-07-30"
++"Blood pressure above 180/120 mm Hg requires prompt clinical assessment; symptoms may indicate an emergency","all","nonpregnant adults","AHA/ACC High Blood Pressure Guideline 2025","2025-08-14","clinical guideline","high","Device error and symptom context must be considered","Hard block ordinary planning and route by symptom status","2027-07-30"
++"Adults should generally consume less than 2000 mg sodium per day","all","adults","WHO Sodium reduction","2026-05-11","global guideline/fact sheet","high","Population target; individual restrictions vary; current catalogue lacks sodium","Use as reference only until food sodium data is complete","2028-05-11"
++"Prediabetes laboratory reference criteria are A1C 5.7–6.4%, fasting glucose 100–125 mg/dL, or 2-hour OGTT 140–199 mg/dL","all","nonpregnant adults","ADA Standards of Care in Diabetes—2026, section 2","2025-12-08","annual clinical guideline","high","Not a consumer diagnosis; confirmation and laboratory context matter","Educational reference and professional-review prompt only","2026-12-31"
++"Glucose below 70 mg/dL is clinically important hypoglycaemia and below 54 mg/dL is level 2","all","adults","ADA Standards of Care in Diabetes—2026, section 6","2025-12-08","annual clinical guideline","high","Medication, symptoms, and device accuracy matter","Block ordinary planning when current/recurrent and escalate severe events","2026-12-31"
++"There is no ideal universal macronutrient percentage for diabetes prevention or management","all","adults with prediabetes or diabetes","ADA Standards of Care in Diabetes—2026, sections 3 and 5","2025-12-08","annual clinical guideline","high","Individual MNT is recommended","Do not create a fixed diabetic macro formula","2026-12-31"
++"LDL-C and non-HDL-C goals depend on cardiovascular risk and clinical context","all","adults","2026 ACC/AHA Multisociety Dyslipidemia Guideline","2026-03-13","clinical guideline","high","Requires risk assessment and clinical history","Do not show a universal LDL target","2027-07-30"
++"Pancreatitis risk increases at triglycerides at or above 500 mg/dL and is particularly high at or above 1000 mg/dL","all","adults","2026 ACC/AHA Multisociety Dyslipidemia Guideline","2026-03-13","clinical guideline","high","Fasting status and secondary causes require clinical evaluation","Professional-review block at 500; high-priority assessment at 1000","2027-07-30"
++"A heart-healthy dietary pattern replaces saturated-fat sources with unsaturated-fat sources and emphasises minimally processed foods","all","general population","AHA Dietary Guidance to Improve Cardiovascular Health","2026-03-31","scientific statement","high","Not a substitute for disease-specific MNT","Add qualitative cardiometabolic compatibility after food-data migration","2028-03-31"
+diff -ru '--exclude=*.zip' '--exclude=cardiometabolic-prototype.patch' mizaneh-original/mizaneh-main/docs/phase-1/safety-exclusion-list.md mizaneh-work/mizaneh-main/docs/phase-1/safety-exclusion-list.md
+--- mizaneh-original/mizaneh-main/docs/phase-1/safety-exclusion-list.md	2026-07-30 19:52:17.000000000 +0000
++++ mizaneh-work/mizaneh-main/docs/phase-1/safety-exclusion-list.md	2026-07-30 20:03:45.734282878 +0000
+@@ -73,3 +73,35 @@
+ ## 5. Evidence basis
+ 
+ Primary clinical basis: NICE CG32 nutrition-support screening and refeeding-risk recommendations, plus the adult-only/non-pregnancy boundary used by NIDDK’s Body Weight Planner. Additional disease exclusions are product-safety boundaries because ordinary automated meal planning is not medical nutrition therapy.
++
++## 6. Cardiometabolic additions — approved 2026-07-30
++
++### Blood pressure
++
++- Do not diagnose from one user-entered value.
++- Capture measurement setting, validated-cuff status, repeated/average status, date, and symptoms.
++- Blood pressure above 180/120 mm Hg blocks ordinary planning.
++- With chest pain, severe shortness of breath, neurological symptoms, confusion, fainting, or other concerning symptoms, show an emergency-assessment message.
++- Without concerning symptoms, show a timely-clinical-assessment message; do not generate an ordinary plan.
++- Do not automatically recommend potassium-enriched salt before kidney-disease and medicine screening.
++
++### Glycaemia
++
++- Diagnosed diabetes requiring medication coordination, insulin use, hypoglycaemia-causing medication, recurrent/severe hypoglycaemia, uncontrolled diabetes, or hyperglycaemic-crisis concern blocks ordinary planning.
++- A glucose value below 70 mg/dL is a safety event; below 54 mg/dL or inability to self-treat selects an urgent pathway.
++- Prediabetes or an abnormal laboratory value should trigger a calm professional-review recommendation, not a diagnosis.
++- CGM or consumer-device values must not be used as diagnostic tests.
++
++### Lipids
++
++- Do not calculate a universal LDL-C target.
++- Triglycerides at or above 500 mg/dL block ordinary planning pending professional assessment.
++- Triglycerides at or above 1,000 mg/dL select a high-priority assessment pathway because pancreatitis risk is particularly high.
++- Known ASCVD, familial hypercholesterolaemia, or a clinician-directed lipid-lowering diet remains outside ordinary automated treatment scope.
++
++### Shared response
++
++- Explain exactly which user-provided datum triggered the decision.
++- State that Mizaneh is not making a diagnosis.
++- Keep medical details out of URLs, analytics, logs, exports by default, and public metadata.
++- Save health data only after explicit opt-in; allow deletion without deleting non-health profile data.
+Only in mizaneh-work/mizaneh-main/docs: phase-2

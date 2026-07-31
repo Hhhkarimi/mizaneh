@@ -1,5 +1,4 @@
-// Pure label lookups for enum-like form values. Extracted verbatim from
-// the original DietPlanner.tsx — no label text changed.
+// Pure label lookups for enum-like form values.
 
 import type { DayPattern, MealPrep, SleepLevel, WaterLevel } from "@/lib/types";
 

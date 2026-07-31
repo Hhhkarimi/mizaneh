@@ -74,7 +74,7 @@ describe("step navigation & validation", () => {
     await completeWizard(user);
 
     expect(
-      screen.getByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+      screen.getByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" }),
     ).toBeInTheDocument();
   });
 
@@ -123,7 +123,7 @@ describe("substitution picker (round 2, spec user story 24)", () => {
       screen.queryByRole("dialog", { name: "انتخاب جایگزین وعده" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+      screen.getByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" }),
     ).toBeInTheDocument();
   });
 
@@ -190,7 +190,7 @@ describe("save / restore session (round 2, spec user stories 25-28)", () => {
     expect(prompt).toBeInTheDocument();
     // Not auto-restored: results aren't shown until the user chooses "بله".
     expect(
-      screen.queryByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+      screen.queryByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" }),
     ).not.toBeInTheDocument();
   });
 
@@ -214,7 +214,7 @@ describe("save / restore session (round 2, spec user stories 25-28)", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+      screen.getByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" }),
     ).toBeInTheDocument();
   });
 
@@ -236,7 +236,7 @@ describe("save / restore session (round 2, spec user stories 25-28)", () => {
     await user.click(await screen.findByRole("button", { name: "نه، پاک کن" }));
     expect(window.localStorage.getItem("mizaneh:session:v1")).toBeNull();
     expect(
-      screen.queryByRole("heading", { name: "هفت روز روشن و قابل اجرا" }),
+      screen.queryByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" }),
     ).not.toBeInTheDocument();
   });
 });
@@ -357,5 +357,81 @@ describe("mobile / RTL rendering smoke test", () => {
       (_, element) => element?.getAttribute("dir") === "ltr",
     );
     expect(hardcodedLtr).toHaveLength(0);
+  });
+});
+
+describe("three-goal onboarding and safety", () => {
+  it("uses guided selection to recommend muscle gain when resistance training is planned", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+
+    await user.click(screen.getByRole("button", { name: "افزایش وزن یا توده" }));
+    await user.click(screen.getByRole("button", { name: "هم‌زمان شروع می‌کنم" }));
+
+    const recommendation = screen.getByRole("status");
+    expect(recommendation).toHaveTextContent("افزایش حجم عضله");
+    await user.click(within(recommendation).getByRole("button", { name: "انتخاب پیشنهاد" }));
+
+    const directSelector = screen.getByRole("group", { name: "انتخاب مستقیم هدف" });
+    expect(within(directSelector).getByRole("button", { name: /افزایش حجم عضله/ })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /ادامه/ }));
+    expect(screen.getByRole("heading", { name: "اطلاعات تمرین مقاومتی" })).toBeInTheDocument();
+  });
+
+  it("shows appetite and digestive-tolerance fields for healthy weight gain", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    const directSelector = screen.getByRole("group", { name: "انتخاب مستقیم هدف" });
+    await user.click(within(directSelector).getByRole("button", { name: /افزایش وزن/ }));
+    await user.click(screen.getByRole("button", { name: /ادامه/ }));
+    expect(screen.getByRole("heading", { name: "اشتها و تحمل غذا" })).toBeInTheDocument();
+  });
+
+  it("does not generate an ordinary plan after a blocking safety disclosure", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await user.click(screen.getByRole("button", { name: /ادامه/ }));
+    await user.click(screen.getByRole("button", { name: /ادامه/ }));
+    await user.click(screen.getByRole("button", { name: /ادامه/ }));
+    await user.click(screen.getByLabelText("باردار هستم"));
+    await user.click(screen.getByRole("button", { name: "ساخت برنامه هفتگی" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/بررسی حرفه‌ای|بارداری/);
+    expect(screen.queryByRole("heading", { name: "هفت روز روشن، قابل ویرایش و هدف‌محور" })).not.toBeInTheDocument();
+  });
+});
+
+describe("editable plans and v2 workspace", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("opens progressive editing controls without replacing the readable plan", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await completeWizard(user);
+    await user.click(screen.getByRole("button", { name: "ویرایش برنامه" }));
+    expect(screen.getByRole("group", { name: "تاریخچه و بازنشانی" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("مقدار").length).toBeGreaterThan(0);
+  });
+
+  it("persists both the legacy compatibility session and the versioned workspace after explicit save", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    await completeWizard(user);
+    await user.click(screen.getByRole("button", { name: "ذخیره روی این دستگاه" }));
+    expect(window.localStorage.getItem("mizaneh:session:v1")).not.toBeNull();
+    const workspace = JSON.parse(window.localStorage.getItem("mizaneh:workspace:v2") ?? "null");
+    expect(workspace?.version).toBe(2);
+    expect(workspace?.plans?.[0]?.goal).toBe("weight_loss");
+  });
+
+  it("stores gain goals only in v2 and does not overwrite the weight-loss-only v1 compatibility key", async () => {
+    const user = userEvent.setup();
+    render(<DietPlanner />);
+    const directSelector = screen.getByRole("group", { name: "انتخاب مستقیم هدف" });
+    await user.click(within(directSelector).getByRole("button", { name: /^افزایش وزن/ }));
+    await completeWizard(user);
+    await user.click(screen.getByRole("button", { name: "ذخیره روی این دستگاه" }));
+    expect(window.localStorage.getItem("mizaneh:session:v1")).toBeNull();
+    const workspace = JSON.parse(window.localStorage.getItem("mizaneh:workspace:v2") ?? "null");
+    expect(workspace?.plans?.[0]?.goal).toBe("healthy_weight_gain");
   });
 });

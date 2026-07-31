@@ -1,11 +1,9 @@
 // Deterministic weekly meal-plan generation.
 //
-// buildWeeklyPlan's control flow, filters, and scoring formula are
-// extracted verbatim from the original DietPlanner.tsx (deduplicated into
-// two small shared helpers, candidateMeals/scoreMeal, but producing
-// byte-identical output — see lib/plan/build.test.ts's golden-output
-// regression test). substituteMeal (new, per spec user story 10) reuses
-// those same helpers rather than re-implementing selection logic.
+// The original deterministic catalogue-selection core is preserved and
+// extended with explicit goal/preference filters and explained replacement
+// ranking. Legacy golden-output tests protect the unchanged compatibility
+// path; new goal-specific behavior has separate tests.
 //
 // Determinism: hashValue is a pure string hash (no Math.random anywhere
 // in this module), and variationSeed is an explicit parameter threaded in
@@ -115,6 +113,7 @@ export function candidateMeals(options: {
   cookingTimeMinutes: number;
   breakfastTaste: BreakfastTaste;
   disliked: string[];
+  hiddenFoods?: string[];
 }): MealTemplate[] {
   const {
     slot,
@@ -123,10 +122,12 @@ export function candidateMeals(options: {
     cookingTimeMinutes,
     breakfastTaste,
     disliked,
+    hiddenFoods = [],
   } = options;
 
   const filtered = mealTemplates
     .filter((meal) => meal.slot === slot)
+    .filter((meal) => !hiddenFoods.includes(meal.id))
     .filter((meal) => meal.styles.includes(dietStyle))
     .filter(
       (meal) => !meal.allergens.some((allergen) => allergies.includes(allergen)),
@@ -145,6 +146,7 @@ export function candidateMeals(options: {
 
   const allergySafe = mealTemplates
     .filter((meal) => meal.slot === slot)
+    .filter((meal) => !hiddenFoods.includes(meal.id))
     .filter(
       (meal) => !meal.allergens.some((allergen) => allergies.includes(allergen)),
     )
@@ -170,6 +172,7 @@ export function scoreMeal(
     slotIndex: number;
     variationSeed: number;
     alreadyUsed: boolean;
+    favourite?: boolean;
   },
 ) {
   const {
@@ -182,10 +185,12 @@ export function scoreMeal(
     slotIndex,
     variationSeed,
     alreadyUsed,
+    favourite = false,
   } = context;
 
   let result = Math.abs(meal.calories - targetCalories);
   if (alreadyUsed) result += 2500;
+  if (favourite) result -= 180;
   if (mode === "quick") result += meal.prep * 22;
   if (mode === "batch" && !meal.batchFriendly) result += 900;
   if (mode === "protein") {
@@ -205,6 +210,7 @@ function toPlannedMeal(
   selected: MealTemplate,
   slotLabel: string,
   targetCalories: number,
+  replacement?: Pick<PlannedMeal, "replacementClass" | "replacementReason">,
 ): PlannedMeal {
   const scale = Math.min(1.35, Math.max(0.7, targetCalories / selected.calories));
   return {
@@ -214,6 +220,8 @@ function toPlannedMeal(
     targetProtein: Math.round(selected.protein * scale),
     targetFiber: Math.round(selected.fiber * scale),
     portionCue: portionCue(scale),
+    nutritionCompleteness: selected.nutritionCompleteness ?? "partial",
+    ...replacement,
   };
 }
 
@@ -242,6 +250,7 @@ export function buildWeeklyPlan(
         cookingTimeMinutes: Number(form.cookingTime),
         breakfastTaste: form.breakfastTaste,
         disliked,
+        hiddenFoods: form.hiddenFoods,
       });
 
       const ranked = [...candidates].sort(
@@ -256,6 +265,7 @@ export function buildWeeklyPlan(
             slotIndex,
             variationSeed,
             alreadyUsed: used.get(slot.slot)?.has(a.id) ?? false,
+            favourite: form.favourites.includes(a.id),
           }) -
           scoreMeal(b, {
             targetCalories,
@@ -267,6 +277,7 @@ export function buildWeeklyPlan(
             slotIndex,
             variationSeed,
             alreadyUsed: used.get(slot.slot)?.has(b.id) ?? false,
+            favourite: form.favourites.includes(b.id),
           }),
       );
 
@@ -309,7 +320,7 @@ export function applySubstitution(
   if (!current) return day;
   const slotIndex = day.meals.findIndex((meal) => meal === current);
   const meals = day.meals.map((meal, index) =>
-    index === slotIndex ? replacement : meal,
+    index === slotIndex ? { ...replacement, instanceId: current.instanceId, locked: current.locked } : meal,
   );
   return {
     ...day,
@@ -350,6 +361,7 @@ export function getSubstituteOptions(
     cookingTimeMinutes: Number(form.cookingTime),
     breakfastTaste: form.breakfastTaste,
     disliked,
+    hiddenFoods: form.hiddenFoods,
   }).filter((meal) => meal.id !== current.id);
 
   if (candidates.length === 0) return [];
@@ -369,6 +381,7 @@ export function getSubstituteOptions(
         slotIndex,
         variationSeed: variationSeed + 1,
         alreadyUsed: false,
+        favourite: form.favourites.includes(a.id),
       }) -
       scoreMeal(b, {
         targetCalories: current.targetCalories,
@@ -380,12 +393,34 @@ export function getSubstituteOptions(
         slotIndex,
         variationSeed: variationSeed + 1,
         alreadyUsed: false,
+        favourite: form.favourites.includes(b.id),
       }),
   );
 
-  return ranked.slice(0, limit).map((meal) =>
-    toPlannedMeal(meal, current.displaySlot, current.targetCalories),
-  );
+  return ranked.slice(0, limit).map((meal) => {
+    const calorieDifference = Math.abs(meal.calories - current.calories) / Math.max(1, current.calories);
+    const proteinDifference = Math.abs(meal.protein - current.protein) / Math.max(1, current.protein);
+    const fiberDifference = Math.abs(meal.fiber - current.fiber) / Math.max(1, current.fiber);
+    const favourite = form.favourites.includes(meal.id);
+    const replacementClass: PlannedMeal["replacementClass"] = favourite
+      ? "preference"
+      : calorieDifference <= 0.1 && proteinDifference <= 0.2 && fiberDifference <= 0.3
+        ? "close"
+        : calorieDifference <= 0.2 && proteinDifference <= 0.4
+          ? "similar"
+          : "not_equivalent";
+    const replacementReason = replacementClass === "close"
+      ? "انرژی، پروتئین و فیبر آن به وعدهٔ فعلی نزدیک است."
+      : replacementClass === "similar"
+        ? "نقش وعده و انرژی نزدیک است، اما ترکیب مواد مغذی دقیقاً یکسان نیست."
+        : replacementClass === "preference"
+          ? "با سلیقهٔ ثبت‌شدهٔ شما هماهنگ است؛ تفاوت تغذیه‌ای را هم بررسی کنید."
+          : "برای تنوع پیشنهاد شده است و از نظر تغذیه‌ای معادل کامل نیست.";
+    return toPlannedMeal(meal, current.displaySlot, current.targetCalories, {
+      replacementClass,
+      replacementReason,
+    });
+  });
 }
 
 /**
@@ -411,7 +446,7 @@ export function substituteMeal(
 
   const slotIndex = day.meals.findIndex((meal) => meal === current);
   const meals = day.meals.map((meal, index) =>
-    index === slotIndex ? replacement : meal,
+    index === slotIndex ? { ...replacement, instanceId: current.instanceId, locked: current.locked } : meal,
   );
 
   return {
