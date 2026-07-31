@@ -1,5 +1,25 @@
 # Changelog — Mizaneh production-readiness audit + fundamental upgrade
 
+
+## 2026-07-31 — Clinically supported nutrition planning v5
+
+- Changed the safety boundary so a stable diagnosis alone does not block plan generation; acute red flags remain non-bypassable stops.
+- Added condition-specific inputs for pregnancy, breastfeeding, eating-disorder support, serious allergy, dysphagia/IDDSI, kidney and liver disease, cancer treatment, recent surgery, gastrointestinal disease/malabsorption and clinician-directed MNT.
+- Added deterministic condition-aware ranking, food exclusions and preparation notes without guessing missing clinical restrictions.
+- Added calcium, iron, magnesium, phosphorus, zinc, folate, iodine, vitamin B12, vitamin D and choline across catalogue estimates, custom foods, recipes, meal/day/week totals and exports.
+- Added an in-product scientific source registry with publication dates, review dates, links, evidence type and limitation text.
+- Preserved the direct three-goal selector, navigation, visual identity, Vazirmatn and user display settings.
+- Added v5 policy, safety, profile, source-registry, custom-food/recipe and deterministic-plan tests.
+
+## 2026-07-31 — Condition-adapted cardiometabolic planning and readability
+
+- Replaced the guided two-question goal recommendation with direct access to all three goals.
+- Stable hypertension, diabetes/prediabetes and dyslipidaemia no longer block plan generation; plans are adapted conservatively and carry a prominent clinician-review warning.
+- Kept hard stops for urgent warning symptoms, severe hypoglycaemia/crisis, triglycerides >=1000 mg/dL, refeeding risk and other out-of-scope medical nutrition therapy.
+- Added carbohydrates, total fat, saturated fat, sodium, added sugar and potassium to catalogue estimates, daily/weekly totals, editing and exports.
+- Added explicit `estimated` and `user_entered` provenance so incomplete recipe data are not presented as verified clinical values.
+- Increased foreground/background contrast and redesigned direct goal cards and clinical-plan explanations for desktop and mobile readability.
+
 Cumulative changes against `BASE_COMMIT` `4a2d747d027ce3e85413a12488009d686e6187b1`
 (the original, untouched repository), covering both work rounds. No
 formula constant, meal-catalogue nutrition value, or existing validation
@@ -112,3 +132,35 @@ one field only.
   again in round 2 — see `CONTEXT.md` §9.1).
 - The client-only, no-backend architecture and its privacy guarantee
   (strengthened in wording, not weakened, by round 2's opt-in storage).
+
+## Specification review package — 2026-07-30
+
+- Recorded the approved guided-goal-selection direction with optional comparison cards.
+- Added the phase-3 multi-goal product specification.
+- Added explicit blood-pressure, glycaemia, and lipid safety requirements.
+- Added migration, editable-plan, progress-trend, privacy, security, accessibility, testing, and acceptance requirements.
+- No production code or production route was changed.
+
+## Phase 4 — approved multi-goal implementation — 2026-07-31
+
+- Implemented explicit weight-loss, muscle-gain and healthy-weight-gain modes.
+- Added guided goal selection, optional comparison and direct returning-user selection.
+- Added versioned NASEM 2023 EER calculation policies and uncertainty metadata for new plans while preserving legacy calculations for restored sessions.
+- Added non-bypassable safety exclusions and optional blood-pressure, glycaemia and lipid context.
+- Added full progressive plan editing, custom foods, custom recipes, recalculation, compatibility findings, locks, undo/redo and resets.
+- Added robust trend tracking and explicit, capped energy-adjustment proposals.
+- Added v2 multi-plan local workspace, versions, comparison and v1 migration.
+- Removed the temporary production prototype route, removed non-Vazirmatn font use, restored creator attribution and added security headers.
+- Added 59 static test declarations across goal, calculation, safety, editing, trend, storage and UI behavior.
+- Full lint/test/build remains an explicit release gate because dependencies could not be installed in the execution environment; see `docs/phase-4/verification-report.md`.
+
+## Phase 4.1 — health-screen usability correction — 2026-07-31
+
+- Replaced oversized health-card checkboxes with compact disclosure buttons using `aria-expanded` and `aria-pressed`.
+- Corrected the CSS selector that applied a 46px minimum height to native checkboxes.
+- Added a plain-language safety decision panel that separates the reason, explanation and concrete next step.
+- Added structured, versioned safety issues while preserving the legacy `reasons` export field.
+- Improved focus management: a blocked submission scrolls to and focuses the detailed safety explanation.
+- Added responsive two-column health fields, clearer labels, selected-state feedback and visible keyboard focus.
+- Changed the final action label when planning is blocked so users are not told that a plan will be generated.
+- Added regression tests for structured safety messages and health disclosure behavior.

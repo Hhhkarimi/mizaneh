@@ -10,6 +10,38 @@ function form(overrides: Partial<PlannerForm> = {}): PlannerForm {
   return { ...defaultForm, ...overrides };
 }
 
+const addedNutritionKeys = new Set([
+  "carbs",
+  "fat",
+  "saturatedFat",
+  "sodiumMg",
+  "addedSugar",
+  "potassiumMg",
+  "nutritionCompleteness",
+  "nutritionSource",
+  "sourceNote",
+  "targetCarbs",
+  "targetFat",
+  "targetSaturatedFat",
+  "targetSodiumMg",
+  "targetAddedSugar",
+  "targetPotassiumMg",
+  "calciumMg", "ironMg", "magnesiumMg", "phosphorusMg", "zincMg", "folateMcg", "iodineMcg", "vitaminB12Mcg", "vitaminDMcg", "cholineMg",
+  "targetCalciumMg", "targetIronMg", "targetMagnesiumMg", "targetPhosphorusMg", "targetZincMg", "targetFolateMcg", "targetIodineMcg", "targetVitaminB12Mcg", "targetVitaminDMcg", "targetCholineMg", "clinicalNote",
+]);
+
+function withoutAddedNutrition(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutAddedNutrition);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !addedNutritionKeys.has(key))
+        .map(([key, item]) => [key, withoutAddedNutrition(item)]),
+    );
+  }
+  return value;
+}
+
 const sampleForms: PlannerForm[] = [
   { ...defaultForm },
   {
@@ -78,7 +110,7 @@ describe("buildWeeklyPlan — golden-output regression (pre-refactor parity)", (
         planProtein,
       }),
     );
-    expect(JSON.parse(JSON.stringify(results))).toEqual(trimmedGolden);
+    expect(withoutAddedNutrition(JSON.parse(JSON.stringify(results)))).toEqual(trimmedGolden);
   });
 
   it("still selects the exact same set of ingredients per shopping category as the pre-refactor fixture (content, not shape)", () => {
@@ -186,6 +218,29 @@ describe("buildWeeklyPlan — totals", () => {
       expect(day.calories).toBe(cal);
       expect(day.protein).toBe(pro);
       expect(day.fiber).toBe(fib);
+    }
+  });
+});
+
+describe("buildWeeklyPlan — condition-adapted planning", () => {
+  it("keeps stable cardiometabolic conditions plan-buildable and reports supported nutrients", () => {
+    const f = form();
+    f.cardiometabolic.bloodPressure = {
+      ...f.cardiometabolic.bloodPressure, enabled: true, diagnosedHypertension: true, stableUnderCare: true, systolic: "145", diastolic: "90",
+    };
+    f.cardiometabolic.glycaemia = {
+      ...f.cardiometabolic.glycaemia, enabled: true, diabetesHistory: true, measurementType: "a1c", unit: "percent", value: "7.1",
+    };
+    f.cardiometabolic.lipids = {
+      ...f.cardiometabolic.lipids, enabled: true, diagnosedDyslipidaemia: true, reviewedProfessionally: true, ldl: "135", triglycerides: "220",
+    };
+    const plan = buildWeeklyPlan(f, calculateMetrics(f), "variety", 1);
+    expect(plan).toHaveLength(7);
+    for (const day of plan) {
+      expect(day.sodiumMg).toBeGreaterThan(0);
+      expect(day.saturatedFat).toBeGreaterThanOrEqual(0);
+      expect(day.carbs).toBeGreaterThan(0);
+      expect(day.nutritionCompleteness).toBe("estimated");
     }
   });
 });
@@ -303,5 +358,32 @@ describe("meal catalogue sanity", () => {
       );
       expect(hasAllergenFree).toBe(true);
     }
+  });
+});
+
+
+describe("buildWeeklyPlan — individualized clinical conditions", () => {
+  it("creates five eating opportunities and a late snack for cirrhosis", () => {
+    const f = form({ medicalConditions: ["liver_disease"], meals: "3" });
+    f.clinicalCare.liver.stage = "compensated_cirrhosis";
+    const plan = buildWeeklyPlan(f, calculateMetrics(f), "variety", 2);
+    expect(plan.every((day) => day.meals.length === 5)).toBe(true);
+    expect(plan[0].meals.some((meal) => meal.displaySlot.includes("آخر شب"))).toBe(true);
+  });
+
+  it("adds a clinical preparation note for a clinician-entered dysphagia texture", () => {
+    const f = form({ swallowingDifficulty: true });
+    f.clinicalCare.dysphagia.foodLevel = "5";
+    f.clinicalCare.dysphagia.drinkLevel = "2";
+    const plan = buildWeeklyPlan(f, calculateMetrics(f), "variety", 2);
+    expect(plan[0].meals[0].clinicalNote).toContain("سطح ۵");
+  });
+
+  it("keeps generated plans deterministic under the same clinical inputs", () => {
+    const f = form({ medicalConditions: ["kidney_disease", "medical_nutrition_therapy"] });
+    f.clinicalCare.kidney.stage = "3_5_no_dialysis";
+    f.clinicalCare.customMnt.sodiumLimitMg = "1800";
+    const metrics = calculateMetrics(f);
+    expect(buildWeeklyPlan(f, metrics, "variety", 9)).toEqual(buildWeeklyPlan(f, metrics, "variety", 9));
   });
 });

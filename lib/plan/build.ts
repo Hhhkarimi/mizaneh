@@ -1,11 +1,9 @@
 // Deterministic weekly meal-plan generation.
 //
-// buildWeeklyPlan's control flow, filters, and scoring formula are
-// extracted verbatim from the original DietPlanner.tsx (deduplicated into
-// two small shared helpers, candidateMeals/scoreMeal, but producing
-// byte-identical output — see lib/plan/build.test.ts's golden-output
-// regression test). substituteMeal (new, per spec user story 10) reuses
-// those same helpers rather than re-implementing selection logic.
+// The original deterministic catalogue-selection core is preserved and
+// extended with explicit goal/preference filters and explained replacement
+// ranking. Legacy golden-output tests protect the unchanged compatibility
+// path; new goal-specific behavior has separate tests.
 //
 // Determinism: hashValue is a pure string hash (no Math.random anywhere
 // in this module), and variationSeed is an explicit parameter threaded in
@@ -23,22 +21,32 @@ import type {
   PlannedMeal,
 } from "@/lib/types";
 import { days, mealTemplates } from "@/lib/food/catalogue";
+import { clinicalMealScore, clinicalPreparationNote, getClinicalNutritionProfile } from "@/lib/clinical/diet-profile";
+import { recalculateDay } from "@/lib/plan/editor";
 
 export function getSlotShares(form: PlannerForm) {
   let breakfast = form.meals === "5" ? 0.22 : form.meals === "4" ? 0.24 : 0.28;
   let lunch = form.meals === "5" ? 0.34 : form.meals === "4" ? 0.36 : 0.4;
   let dinner = form.meals === "5" ? 0.26 : form.meals === "4" ? 0.3 : 0.32;
-  const snackTotal = Math.max(0, 1 - breakfast - lunch - dinner);
+  let snackTotal = Math.max(0, 1 - breakfast - lunch - dinner);
 
-  if (form.hungerPeak === "morning") {
+  const clinicalProfile = getClinicalNutritionProfile(form);
+  if (clinicalProfile.consistentCarbohydratePattern) {
+    breakfast = form.meals === "5" ? 0.22 : form.meals === "4" ? 0.24 : 0.27;
+    lunch = form.meals === "5" ? 0.32 : form.meals === "4" ? 0.35 : 0.38;
+    dinner = form.meals === "5" ? 0.28 : form.meals === "4" ? 0.31 : 0.35;
+    snackTotal = Math.max(0, 1 - breakfast - lunch - dinner);
+  }
+
+  if (!clinicalProfile.consistentCarbohydratePattern && form.hungerPeak === "morning") {
     breakfast += 0.04;
     dinner -= 0.03;
     lunch -= 0.01;
-  } else if (form.hungerPeak === "afternoon") {
+  } else if (!clinicalProfile.consistentCarbohydratePattern && form.hungerPeak === "afternoon") {
     lunch += 0.03;
     breakfast -= 0.02;
     dinner -= 0.01;
-  } else {
+  } else if (!clinicalProfile.consistentCarbohydratePattern) {
     dinner += 0.04;
     breakfast -= 0.03;
     lunch -= 0.01;
@@ -48,29 +56,24 @@ export function getSlotShares(form: PlannerForm) {
 }
 
 export function getDaySlots(form: PlannerForm) {
-  const shares = getSlotShares(form);
+  const profile = getClinicalNutritionProfile(form);
+  const effectiveMeals: PlannerForm["meals"] = profile.requiresSmallFrequentMeals || profile.requiresLateEveningSnack ? "5" : form.meals;
+  const shares = getSlotShares({ ...form, meals: effectiveMeals });
   const slots: Array<{ slot: MealSlot; label: string; share: number }> = [
     { slot: "breakfast", label: "صبحانه", share: shares.breakfast },
   ];
 
-  if (form.meals === "5") {
-    slots.push({
-      slot: "snack",
-      label: "میان‌وعده صبح",
-      share: shares.snackTotal / 2,
-    });
+  if (effectiveMeals === "5") {
+    slots.push({ slot: "snack", label: "میان‌وعده صبح", share: shares.snackTotal / 2 });
   }
-
   slots.push({ slot: "lunch", label: "ناهار", share: shares.lunch });
-
-  if (form.meals !== "3") {
+  if (effectiveMeals !== "3") {
     slots.push({
       slot: "snack",
-      label: "میان‌وعده عصر",
-      share: form.meals === "5" ? shares.snackTotal / 2 : shares.snackTotal,
+      label: profile.requiresLateEveningSnack ? "میان‌وعده آخر شب" : "میان‌وعده عصر",
+      share: effectiveMeals === "5" ? shares.snackTotal / 2 : shares.snackTotal,
     });
   }
-
   slots.push({ slot: "dinner", label: "شام", share: shares.dinner });
   return slots;
 }
@@ -115,6 +118,8 @@ export function candidateMeals(options: {
   cookingTimeMinutes: number;
   breakfastTaste: BreakfastTaste;
   disliked: string[];
+  hiddenFoods?: string[];
+  additionalAvoidTokens?: string[];
 }): MealTemplate[] {
   const {
     slot,
@@ -123,10 +128,14 @@ export function candidateMeals(options: {
     cookingTimeMinutes,
     breakfastTaste,
     disliked,
+    hiddenFoods = [],
+    additionalAvoidTokens = [],
   } = options;
+  const excludedTokens = [...disliked, ...additionalAvoidTokens];
 
   const filtered = mealTemplates
     .filter((meal) => meal.slot === slot)
+    .filter((meal) => !hiddenFoods.includes(meal.id))
     .filter((meal) => meal.styles.includes(dietStyle))
     .filter(
       (meal) => !meal.allergens.some((allergen) => allergies.includes(allergen)),
@@ -140,15 +149,16 @@ export function candidateMeals(options: {
       ) {
         return false;
       }
-      return !containsDisliked(meal, disliked);
+      return !containsDisliked(meal, excludedTokens);
     });
 
   const allergySafe = mealTemplates
     .filter((meal) => meal.slot === slot)
+    .filter((meal) => !hiddenFoods.includes(meal.id))
     .filter(
       (meal) => !meal.allergens.some((allergen) => allergies.includes(allergen)),
     )
-    .filter((meal) => !containsDisliked(meal, disliked));
+    .filter((meal) => !containsDisliked(meal, excludedTokens));
 
   return filtered.length > 0 ? filtered : allergySafe;
 }
@@ -170,6 +180,7 @@ export function scoreMeal(
     slotIndex: number;
     variationSeed: number;
     alreadyUsed: boolean;
+    favourite?: boolean;
   },
 ) {
   const {
@@ -182,10 +193,12 @@ export function scoreMeal(
     slotIndex,
     variationSeed,
     alreadyUsed,
+    favourite = false,
   } = context;
 
   let result = Math.abs(meal.calories - targetCalories);
   if (alreadyUsed) result += 2500;
+  if (favourite) result -= 180;
   if (mode === "quick") result += meal.prep * 22;
   if (mode === "batch" && !meal.batchFriendly) result += 900;
   if (mode === "protein") {
@@ -205,15 +218,39 @@ function toPlannedMeal(
   selected: MealTemplate,
   slotLabel: string,
   targetCalories: number,
+  clinicalNote?: string,
+  replacement?: Pick<PlannedMeal, "replacementClass" | "replacementReason">,
 ): PlannedMeal {
   const scale = Math.min(1.35, Math.max(0.7, targetCalories / selected.calories));
+  const scaled = (value: number | undefined, precision = 0) => typeof value === "number"
+    ? Number((value * scale).toFixed(precision))
+    : undefined;
   return {
     ...selected,
     displaySlot: slotLabel,
     targetCalories,
     targetProtein: Math.round(selected.protein * scale),
     targetFiber: Math.round(selected.fiber * scale),
+    targetCarbs: scaled(selected.carbs),
+    targetFat: scaled(selected.fat),
+    targetSaturatedFat: scaled(selected.saturatedFat, 1),
+    targetSodiumMg: scaled(selected.sodiumMg),
+    targetAddedSugar: scaled(selected.addedSugar, 1),
+    targetPotassiumMg: scaled(selected.potassiumMg),
+    targetCalciumMg: scaled(selected.calciumMg),
+    targetIronMg: scaled(selected.ironMg, 1),
+    targetMagnesiumMg: scaled(selected.magnesiumMg),
+    targetPhosphorusMg: scaled(selected.phosphorusMg),
+    targetZincMg: scaled(selected.zincMg, 1),
+    targetFolateMcg: scaled(selected.folateMcg),
+    targetIodineMcg: scaled(selected.iodineMcg),
+    targetVitaminB12Mcg: scaled(selected.vitaminB12Mcg, 1),
+    targetVitaminDMcg: scaled(selected.vitaminDMcg, 1),
+    targetCholineMg: scaled(selected.cholineMg),
+    clinicalNote,
     portionCue: portionCue(scale),
+    nutritionCompleteness: selected.nutritionCompleteness ?? "partial",
+    ...replacement,
   };
 }
 
@@ -230,6 +267,8 @@ export function buildWeeklyPlan(
     ["dinner", new Set()],
   ]);
   const disliked = dislikeTokens(form.dislikes);
+  const clinicalProfile = getClinicalNutritionProfile(form, metrics.targetCalories);
+  const clinicalNote = clinicalPreparationNote(form);
   const slots = getDaySlots(form);
 
   return days.map((day, dayIndex) => {
@@ -242,6 +281,8 @@ export function buildWeeklyPlan(
         cookingTimeMinutes: Number(form.cookingTime),
         breakfastTaste: form.breakfastTaste,
         disliked,
+        hiddenFoods: form.hiddenFoods,
+        additionalAvoidTokens: clinicalProfile.additionalAvoidTokens,
       });
 
       const ranked = [...candidates].sort(
@@ -256,7 +297,8 @@ export function buildWeeklyPlan(
             slotIndex,
             variationSeed,
             alreadyUsed: used.get(slot.slot)?.has(a.id) ?? false,
-          }) -
+            favourite: form.favourites.includes(a.id),
+          }) + clinicalMealScore(a, form) -
           scoreMeal(b, {
             targetCalories,
             mode,
@@ -267,18 +309,22 @@ export function buildWeeklyPlan(
             slotIndex,
             variationSeed,
             alreadyUsed: used.get(slot.slot)?.has(b.id) ?? false,
-          }),
+            favourite: form.favourites.includes(b.id),
+          }) - clinicalMealScore(b, form),
       );
 
-      const selected =
-        ranked[0] ??
-        mealTemplates.find(
-          (meal) => meal.slot === slot.slot && meal.allergens.length === 0,
-        ) ??
-        mealTemplates[0];
+      const selected = ranked[0] ?? mealTemplates.find((meal) => {
+        const text = `${meal.title} ${meal.ingredients.join(" ")}`;
+        return meal.slot === slot.slot
+          && !meal.allergens.some((allergen) => form.allergies.includes(allergen))
+          && !clinicalProfile.additionalAvoidTokens.some((token) => text.includes(token));
+      });
+      if (!selected) {
+        throw new Error(`برای وعدهٔ ${slot.label} گزینهٔ سازگار با محدودیت‌های ثبت‌شده پیدا نشد.`);
+      }
       used.get(slot.slot)?.add(selected.id);
 
-      return toPlannedMeal(selected, slot.label, targetCalories);
+      return toPlannedMeal(selected, slot.label, targetCalories, clinicalNote);
     });
 
     return {
@@ -287,6 +333,27 @@ export function buildWeeklyPlan(
       calories: plannedMeals.reduce((total, meal) => total + meal.targetCalories, 0),
       protein: plannedMeals.reduce((total, meal) => total + meal.targetProtein, 0),
       fiber: plannedMeals.reduce((total, meal) => total + meal.targetFiber, 0),
+      carbs: plannedMeals.reduce((total, meal) => total + (meal.targetCarbs ?? 0), 0),
+      fat: plannedMeals.reduce((total, meal) => total + (meal.targetFat ?? 0), 0),
+      saturatedFat: plannedMeals.reduce((total, meal) => total + (meal.targetSaturatedFat ?? 0), 0),
+      sodiumMg: plannedMeals.reduce((total, meal) => total + (meal.targetSodiumMg ?? 0), 0),
+      addedSugar: plannedMeals.reduce((total, meal) => total + (meal.targetAddedSugar ?? 0), 0),
+      potassiumMg: plannedMeals.reduce((total, meal) => total + (meal.targetPotassiumMg ?? 0), 0),
+      calciumMg: plannedMeals.reduce((total, meal) => total + (meal.targetCalciumMg ?? 0), 0),
+      ironMg: plannedMeals.reduce((total, meal) => total + (meal.targetIronMg ?? 0), 0),
+      magnesiumMg: plannedMeals.reduce((total, meal) => total + (meal.targetMagnesiumMg ?? 0), 0),
+      phosphorusMg: plannedMeals.reduce((total, meal) => total + (meal.targetPhosphorusMg ?? 0), 0),
+      zincMg: plannedMeals.reduce((total, meal) => total + (meal.targetZincMg ?? 0), 0),
+      folateMcg: plannedMeals.reduce((total, meal) => total + (meal.targetFolateMcg ?? 0), 0),
+      iodineMcg: plannedMeals.reduce((total, meal) => total + (meal.targetIodineMcg ?? 0), 0),
+      vitaminB12Mcg: plannedMeals.reduce((total, meal) => total + (meal.targetVitaminB12Mcg ?? 0), 0),
+      vitaminDMcg: plannedMeals.reduce((total, meal) => total + (meal.targetVitaminDMcg ?? 0), 0),
+      cholineMg: plannedMeals.reduce((total, meal) => total + (meal.targetCholineMg ?? 0), 0),
+      nutritionCompleteness: plannedMeals.every((meal) => meal.nutritionCompleteness === "complete")
+        ? "complete"
+        : plannedMeals.every((meal) => meal.nutritionCompleteness === "estimated" || meal.nutritionCompleteness === "complete")
+          ? "estimated"
+          : "partial",
     };
   });
 }
@@ -309,15 +376,9 @@ export function applySubstitution(
   if (!current) return day;
   const slotIndex = day.meals.findIndex((meal) => meal === current);
   const meals = day.meals.map((meal, index) =>
-    index === slotIndex ? replacement : meal,
+    index === slotIndex ? { ...replacement, instanceId: current.instanceId, locked: current.locked } : meal,
   );
-  return {
-    ...day,
-    meals,
-    calories: meals.reduce((total, meal) => total + meal.targetCalories, 0),
-    protein: meals.reduce((total, meal) => total + meal.targetProtein, 0),
-    fiber: meals.reduce((total, meal) => total + meal.targetFiber, 0),
-  };
+  return recalculateDay({ ...day, meals });
 }
 
 export function getMeal(day: DayPlan, slot: MealSlot, occurrence = 0) {
@@ -350,6 +411,8 @@ export function getSubstituteOptions(
     cookingTimeMinutes: Number(form.cookingTime),
     breakfastTaste: form.breakfastTaste,
     disliked,
+    hiddenFoods: form.hiddenFoods,
+    additionalAvoidTokens: getClinicalNutritionProfile(form).additionalAvoidTokens,
   }).filter((meal) => meal.id !== current.id);
 
   if (candidates.length === 0) return [];
@@ -369,7 +432,8 @@ export function getSubstituteOptions(
         slotIndex,
         variationSeed: variationSeed + 1,
         alreadyUsed: false,
-      }) -
+        favourite: form.favourites.includes(a.id),
+      }) + clinicalMealScore(a, form) -
       scoreMeal(b, {
         targetCalories: current.targetCalories,
         mode: "variety",
@@ -380,12 +444,34 @@ export function getSubstituteOptions(
         slotIndex,
         variationSeed: variationSeed + 1,
         alreadyUsed: false,
-      }),
+        favourite: form.favourites.includes(b.id),
+      }) - clinicalMealScore(b, form),
   );
 
-  return ranked.slice(0, limit).map((meal) =>
-    toPlannedMeal(meal, current.displaySlot, current.targetCalories),
-  );
+  return ranked.slice(0, limit).map((meal) => {
+    const calorieDifference = Math.abs(meal.calories - current.calories) / Math.max(1, current.calories);
+    const proteinDifference = Math.abs(meal.protein - current.protein) / Math.max(1, current.protein);
+    const fiberDifference = Math.abs(meal.fiber - current.fiber) / Math.max(1, current.fiber);
+    const favourite = form.favourites.includes(meal.id);
+    const replacementClass: PlannedMeal["replacementClass"] = favourite
+      ? "preference"
+      : calorieDifference <= 0.1 && proteinDifference <= 0.2 && fiberDifference <= 0.3
+        ? "close"
+        : calorieDifference <= 0.2 && proteinDifference <= 0.4
+          ? "similar"
+          : "not_equivalent";
+    const replacementReason = replacementClass === "close"
+      ? "انرژی، پروتئین و فیبر آن به وعدهٔ فعلی نزدیک است."
+      : replacementClass === "similar"
+        ? "نقش وعده و انرژی نزدیک است، اما ترکیب مواد مغذی دقیقاً یکسان نیست."
+        : replacementClass === "preference"
+          ? "با سلیقهٔ ثبت‌شدهٔ شما هماهنگ است؛ تفاوت تغذیه‌ای را هم بررسی کنید."
+          : "برای تنوع پیشنهاد شده است و از نظر تغذیه‌ای معادل کامل نیست.";
+    return toPlannedMeal(meal, current.displaySlot, current.targetCalories, clinicalPreparationNote(form), {
+      replacementClass,
+      replacementReason,
+    });
+  });
 }
 
 /**
@@ -411,14 +497,8 @@ export function substituteMeal(
 
   const slotIndex = day.meals.findIndex((meal) => meal === current);
   const meals = day.meals.map((meal, index) =>
-    index === slotIndex ? replacement : meal,
+    index === slotIndex ? { ...replacement, instanceId: current.instanceId, locked: current.locked } : meal,
   );
 
-  return {
-    ...day,
-    meals,
-    calories: meals.reduce((total, meal) => total + meal.targetCalories, 0),
-    protein: meals.reduce((total, meal) => total + meal.targetProtein, 0),
-    fiber: meals.reduce((total, meal) => total + meal.targetFiber, 0),
-  };
+  return recalculateDay({ ...day, meals });
 }
