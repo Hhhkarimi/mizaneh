@@ -1,10 +1,7 @@
-// Single source of truth for nutrition calculations: BMR (Mifflin–St
-// Jeor), TDEE, calorie-deficit safeguards, macro targets, and BMI.
-//
-// Extracted verbatim from the original DietPlanner.tsx — no constant,
-// formula, or rounding rule was changed. See docs/research.md for the
-// verification of these constants against primary sources, and
-// CONTEXT.md §4 for the plain-language description of each rule.
+// Frozen legacy-v1 nutrition calculation and shared validation/BMI labels.
+// Existing saved sessions depend on these exact Mifflin–St Jeor/PAL and
+// weight-loss constants. New plans use the versioned policies in
+// lib/calculations; do not silently modernize this compatibility path.
 
 import type { Metrics, PlannerForm } from "@/lib/types";
 import { activityOptions } from "@/lib/food/catalogue";
@@ -54,12 +51,19 @@ export function calculateMetrics(form: PlannerForm): Metrics {
   const bmi = weight / (height / 100) ** 2;
 
   return {
+    goal: form.goal,
     bmr,
     tdee,
+    maintenanceCalories: tdee,
     targetCalories,
+    targetCaloriesMin: targetCalories,
+    targetCaloriesMax: targetCalories,
+    uncertaintyKcal: 0,
     bmi,
     bmiLabel: bmiLabel(bmi),
     protein,
+    proteinMin: protein,
+    proteinMax: protein,
     carbs,
     fat,
     fiber: Math.max(25, Math.round((targetCalories / 1000) * 14)),
@@ -69,17 +73,28 @@ export function calculateMetrics(form: PlannerForm): Metrics {
         ? Math.ceil((weight - targetWeight) / weeklyPace)
         : 0,
     deficit: actualDeficit,
+    surplus: 0,
+    energyAdjustment: -actualDeficit,
     produceGrams: 400,
     waterLiters: form.sex === "male" ? 2.5 : 2,
+    policy: {
+      calculationPolicyId: "loss.deficit.cap20.v1",
+      calculationPolicyVersion: "1.0.0",
+      energyEquationId: "energy.legacy.msj-pal.v1",
+      energyEquationVersion: "1.0.0",
+      evidenceRegistryVersion: "legacy-v1",
+      reviewExpiresAt: "2026-07-31",
+      evidenceCertainty: "legacy",
+      productDecision: true,
+    },
+    warnings: ["این محاسبه متعلق به سیاست قدیمی میزانه است و فقط برای سازگاری نگه‌داری می‌شود."],
   };
 }
 
 /**
- * Step validation, extracted verbatim from the original component. These
- * are hard gates (age 18–80, height 130–220 cm, weight 40–250 kg, BMI ≥
- * 18.5 for both current and target weight) — ADR-0001 preserves them
- * exactly as-is; only a separate, additive safety disclosure was added
- * elsewhere (see components/SafetyAdvisory.tsx).
+ * Shared onboarding validation. Original age/height/weight gates remain;
+ * goal-specific target and resistance-training requirements are additive.
+ * Medical-scope exclusions are evaluated separately by lib/safety/screen.
  */
 export function getValidationMessage(form: PlannerForm, step: number) {
   const age = toNumber(form.age);
@@ -97,26 +112,42 @@ export function getValidationMessage(form: PlannerForm, step: number) {
     if (!Number.isFinite(weight) || weight < 40 || weight > 250) {
       return "وزن را بین ۴۰ تا ۲۵۰ کیلوگرم وارد کن.";
     }
-    if (weight / (height / 100) ** 2 < 18.5) {
+    if (form.goal === "weight_loss" && weight / (height / 100) ** 2 < 18.5) {
       return "این ابزار برای کاهش وزن در BMI کمتر از ۱۸٫۵ برنامه تولید نمی‌کند.";
     }
   }
 
   if (step === 2) {
-    if (
-      !Number.isFinite(targetWeight) ||
-      targetWeight < 40 ||
-      targetWeight >= weight
-    ) {
-      return "وزن هدف باید کمتر از وزن فعلی و حداقل ۴۰ کیلوگرم باشد.";
+    if (!Number.isFinite(targetWeight) || targetWeight < 40 || targetWeight > 300) {
+      return "وزن هدف را بین ۴۰ تا ۳۰۰ کیلوگرم وارد کن.";
     }
-    if (targetWeight / (height / 100) ** 2 < 18.5) {
-      return "وزن هدف انتخاب‌شده پایین‌تر از محدوده BMI مرجع است.";
+    if (form.goal === "weight_loss") {
+      if (targetWeight >= weight) {
+        return "وزن هدف کاهش وزن باید کمتر از وزن فعلی باشد.";
+      }
+      if (targetWeight / (height / 100) ** 2 < 18.5) {
+        return "وزن هدف انتخاب‌شده پایین‌تر از محدوده BMI مرجع است.";
+      }
+    } else if (targetWeight <= weight) {
+      return "وزن هدف افزایش باید بیشتر از وزن فعلی باشد.";
+    }
+    if (
+      form.goal === "muscle_gain" &&
+      form.resistanceTraining === "none"
+    ) {
+      return "برای حجم عضله، تمرین مقاومتی فعلی یا برنامهٔ شروع تمرین را ثبت کن؛ در غیر این صورت افزایش وزن مناسب‌تر است.";
     }
   }
 
   if (step === 4 && form.dislikes.length > 100) {
     return "فهرست غذاهای نامطلوب را کوتاه‌تر از ۱۰۰ نویسه بنویس.";
+  }
+  if (
+    step === 4 &&
+    form.goal === "muscle_gain" &&
+    !form.acknowledgesTrainingRequirement
+  ) {
+    return "برای ادامه تأیید کن که برنامهٔ غذایی جایگزین تمرین مقاومتی نیست.";
   }
 
   return "";

@@ -1,0 +1,23 @@
+source_id,applicable_context,source,publication_date,study_type,certainty,implementation,limitations
+AHA-HTN-2025,Hypertension/CVD,ACC/AHA 2025 hypertension guideline,2025,Clinical guideline,High,DASH/low-sodium supportive pattern,Targets and drugs depend on individual risk
+AHA-DIET-2026,Cardiovascular dietary pattern,AHA dietary guidance,2026,Scientific guidance,High,Minimally processed plant-forward heart-healthy pattern,Not a disease-stage prescription
+WHO-SODIUM,Sodium,WHO sodium guideline,2012/current,Guideline,High,General sodium target,Stricter limits require clinical context
+ADA-SOC-2026,Diabetes/prediabetes,ADA Standards of Care,2026,Standards of care,High,Individualised carbohydrate pattern and diet quality,Medication/insulin coordination required
+ACC-AHA-LIPIDS-2026,Dyslipidaemia,ACC/AHA dyslipidaemia guideline,2026,Clinical guideline,High,Saturated-fat reduction and fibre/unsaturated-fat emphasis,LDL target depends on risk
+NASEM-DRI-ENERGY-2023,Energy/pregnancy,NASEM DRI energy,2023,DRI report,High,Versioned EER and pregnancy increments,Individual prediction error
+NIH-ODS-PREGNANCY,Pregnancy/lactation micronutrients,NIH ODS pregnancy fact sheet,Current,Authoritative reference,High,Food micronutrient priorities and supplement cautions,Supplement dose needs clinical review
+WHO-ANC-NUTRITION,Pregnancy,WHO antenatal iron/folate recommendation,Current,Guideline recommendation,High,Iron/folate coordination,Local protocols and anaemia matter
+NICE-MATERNAL-2025,Pregnancy/postpartum,NICE NG247,2025,Clinical guideline,High,Maternal nutrition/weight care,Requires prenatal care context
+CDC-LACTATION-2026,Breastfeeding,CDC maternal diet and micronutrients,2026,Public-health clinical guidance,High,Mode-dependent energy and nutrient emphasis,Needs vary by lactation mode and stores
+NICE-EATING-DISORDERS-NG69,Eating disorders,NICE NG69,Current,Clinical guideline,High,Regular eating and multidisciplinary care,Automated plan is not treatment
+AAAAI-FOOD-ALLERGY-2026,Food allergy,AAAAI food allergy reference,2026,Professional reference,High,Allergen avoidance and action-plan warning,Cross-contact cannot be guaranteed
+IDDSI-FRAMEWORK,Dysphagia,IDDSI framework,Current,International consensus,High,Entered food/drink texture levels,Level must be clinically assigned
+ASHA-DYSPHAGIA,Dysphagia,ASHA Adult Dysphagia portal,Current,Professional guidance,High,Assessment and texture caution,May require instrumental assessment
+KDOQI-CKD-NUTRITION-2020,CKD,KDOQI nutrition guideline,2020,Clinical guideline,High,Stage/lab-specific protein/electrolytes,No universal renal diet
+KDIGO-CKD-2024,CKD,KDIGO CKD guideline,2024,Clinical guideline,High,Disease-stage context,App cannot classify CKD
+ESPEN-LIVER-2020,Liver disease,ESPEN liver guideline,2020,Clinical guideline,High,"Regular meals, adequate protein, late snack in cirrhosis",Stage/ascites/encephalopathy matter
+ESPEN-CANCER-2021,Cancer,ESPEN cancer guideline,2021,Clinical guideline,High,Energy/protein and symptom support,Treatment/infection context varies
+ESPEN-SURGERY-2025,Surgery,ESPEN surgery guideline,2025,Clinical guideline,High,Stage-based oral progression and protein support,Procedure determines progression
+ESPEN-IBD-2023,IBD,ESPEN IBD guideline,2023,Clinical guideline,High,Flare/tolerance-specific support,Strictures and surgery alter care
+ESPEN-MALABSORPTION-2025,Malabsorption,ESPEN malabsorption guideline,2025,Clinical guideline,High,Subtype-specific support,May require enteral/parenteral care
+USER-CLINICIAN-CONSTRAINTS,Custom MNT,Current treating-team instruction,Per plan,Individual instruction,Contextual,Exact entered restrictions,Authenticity/recency not verified
