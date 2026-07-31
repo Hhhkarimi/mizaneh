@@ -1,7 +1,19 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import type { Allergy, DayPlan, MealSlot, Metrics, PlannedMeal, PlanMode, PlannerForm } from "@/lib/types";
+import type {
+  AdjustmentProposal,
+  Allergy,
+  DayPlan,
+  Goal,
+  MealSlot,
+  Metrics,
+  PlannedMeal,
+  PlanDocument,
+  PlanMode,
+  PlannerForm,
+  WeightMeasurement,
+} from "@/lib/types";
 import {
   activityOptions,
   allergyOptions,
@@ -13,15 +25,36 @@ import {
   stepTitles,
 } from "@/lib/food/catalogue";
 import { calculateMetrics, getValidationMessage } from "@/lib/nutrition/formulas";
-import { formatDecimal, formatNumber, toNumber } from "@/lib/nutrition/format";
+import { formatDecimal, formatNumber } from "@/lib/nutrition/format";
+import { applyReviewedEnergyAdjustment, calculateCurrentMetrics, getCalculationScopeIssue } from "@/lib/calculations/policies";
+import { goalCopy } from "@/lib/domain/goals";
 import { buildWeeklyPlan, applySubstitution, getMeal, getSubstituteOptions } from "@/lib/plan/build";
+import {
+  commitHistory,
+  copyDayTo,
+  createHistory,
+  duplicateDay,
+  ensurePlanIdentity,
+  evaluatePlanCompatibility,
+  recalculateDay,
+  redoHistory,
+  summarizePlan,
+  undoHistory,
+  type PlanHistory,
+} from "@/lib/plan/editor";
 import { buildShoppingList } from "@/lib/plan/shopping";
 import { dayPatternLabel, prepLabel, sleepLabel, waterLabel } from "@/lib/labels";
+import { screenSafety } from "@/lib/safety/screen";
 import { SafetyAdvisory } from "@/components/SafetyAdvisory";
 import { SubstitutePicker } from "@/components/SubstitutePicker";
 import { SaveSessionControls } from "@/components/SaveSessionControls";
 import { RestoreSessionPrompt } from "@/components/RestoreSessionPrompt";
+import { GoalSelection } from "@/components/goal-selection/GoalSelection";
+import { SafetyScreenFields } from "@/components/safety-screen/SafetyScreenFields";
+import { MealEditor } from "@/components/meal-editor/MealEditor";
+import { ProgressTracker } from "@/components/progress/ProgressTracker";
 import { clearSession, saveSession, type StoredSession } from "@/lib/storage/session";
+import { clearWorkspace, saveWorkspace, type StoredWorkspace } from "@/lib/storage/workspace";
 
 function BrandMark({ className = "" }: { className?: string }) {
   return (
@@ -66,29 +99,46 @@ export default function DietPlanner() {
   const [variationSeed, setVariationSeed] = useState(1);
   const [activeDay, setActiveDay] = useState(0);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
+  const [planHistory, setPlanHistory] = useState<PlanHistory | null>(null);
+  const [baselinePlan, setBaselinePlan] = useState<DayPlan[]>([]);
+  const [archivedPlans, setArchivedPlans] = useState<PlanDocument[]>([]);
+  const [activePlanId, setActivePlanId] = useState(() => `plan-${Date.now()}`);
+  const [activePlanCreatedAt, setActivePlanCreatedAt] = useState(() => new Date().toISOString());
+  const [pendingGoal, setPendingGoal] = useState<{ goal: Goal; source: "guided" | "direct" } | null>(null);
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const [measurements, setMeasurements] = useState<WeightMeasurement[]>([]);
+  const [adjustmentProposal, setAdjustmentProposal] = useState<AdjustmentProposal | null>(null);
+  const [lastAdjustmentAt, setLastAdjustmentAt] = useState<string | undefined>(undefined);
+  const [startingTargetCalories, setStartingTargetCalories] = useState<number | null>(null);
+  const [comparisonPlanId, setComparisonPlanId] = useState<string | null>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
-  const previewMetrics = useMemo(() => calculateMetrics(form), [form]);
+  const previewMetrics = useMemo(() => calculateCurrentMetrics(form), [form]);
+  const safetyResult = useMemo(() => screenSafety(form), [form]);
   const activeForm = submittedForm ?? form;
-  const weeklyPlan = useMemo(
-    () =>
-      metrics
-        ? buildWeeklyPlan(activeForm, metrics, planMode, variationSeed)
-        : [],
+  const generatedPlan = useMemo(
+    () => metrics ? ensurePlanIdentity(buildWeeklyPlan(activeForm, metrics, planMode, variationSeed)) : [],
     [activeForm, metrics, planMode, variationSeed],
   );
-  const [substitutions, setSubstitutions] = useState<
-    Record<number, DayPlan>
-  >({});
-  const displayedPlan = useMemo(
-    () => weeklyPlan.map((day, index) => substitutions[index] ?? day),
-    [weeklyPlan, substitutions],
-  );
+  const displayedPlan = planHistory?.present ?? generatedPlan;
   const { groups: shoppingGroups, note: shoppingListNote } = useMemo(
     () => buildShoppingList(displayedPlan),
     [displayedPlan],
   );
   const selectedDay = displayedPlan[activeDay];
+  const planSummary = useMemo(() => summarizePlan(displayedPlan), [displayedPlan]);
+  const compatibilityIssues = useMemo(
+    () => evaluatePlanCompatibility(displayedPlan, activeForm),
+    [displayedPlan, activeForm],
+  );
+  const comparisonPlan = useMemo(
+    () => archivedPlans.find((plan) => plan.id === comparisonPlanId) ?? null,
+    [archivedPlans, comparisonPlanId],
+  );
+  const comparisonSummary = useMemo(
+    () => comparisonPlan ? summarizePlan(comparisonPlan.days) : null,
+    [comparisonPlan],
+  );
 
   const [substitutionTarget, setSubstitutionTarget] = useState<{
     slot: MealSlot;
@@ -106,33 +156,79 @@ export default function DietPlanner() {
     );
   }, [substitutionTarget, selectedDay, activeForm, variationSeed]);
 
+  function commitPlan(next: DayPlan[], announcement: string) {
+    setPlanHistory((current) => current ? commitHistory(current, next) : createHistory(next));
+    setLiveAnnouncement(announcement);
+  }
+
+  function replaceDay(index: number, day: DayPlan, announcement: string) {
+    const next = displayedPlan.map((item, itemIndex) => itemIndex === index ? day : item);
+    commitPlan(next, announcement);
+  }
+
   function openSubstitutePicker(slot: MealSlot, occurrence: number) {
     setSubstitutionTarget({ slot, occurrence });
   }
 
   function applySubstitutionChoice(meal: PlannedMeal) {
     if (!substitutionTarget || !selectedDay) return;
-    const next = applySubstitution(
+    const nextDay = applySubstitution(
       selectedDay,
       substitutionTarget.slot,
       substitutionTarget.occurrence,
       meal,
     );
-    setSubstitutions((current) => ({ ...current, [activeDay]: next }));
+    replaceDay(activeDay, nextDay, "جایگزین انتخاب شد و جمع روز دوباره محاسبه شد.");
     setSubstitutionTarget(null);
   }
 
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
 
-  function handleSaveSession() {
-    const ok = saveSession({
-      form: activeForm,
+  function currentPlanDocument(name = "برنامهٔ فعال", id = activePlanId, parentPlanId = archivedPlans.at(-1)?.id ?? null): PlanDocument | null {
+    if (!metrics || !submittedForm || displayedPlan.length === 0) return null;
+    const now = new Date().toISOString();
+    return {
+      schemaVersion: 2,
+      id,
+      parentPlanId,
+      name,
+      goal: submittedForm.goal,
+      form: structuredClone(submittedForm),
+      safetyScreen: screenSafety(submittedForm),
+      calculation: structuredClone(metrics),
+      startingTargetCalories: startingTargetCalories ?? metrics.targetCalories,
       planMode,
       variationSeed,
-      substitutions,
-    });
-    if (ok) {
+      days: structuredClone(displayedPlan),
+      versions: archivedPlans.map((plan) => ({ id: plan.id, name: plan.name, goal: plan.goal, createdAt: plan.createdAt, parentPlanId: plan.parentPlanId })),
+      measurements: structuredClone(measurements),
+      adjustmentProposals: adjustmentProposal ? [structuredClone(adjustmentProposal)] : [],
+      lastAdjustmentAt,
+      createdAt: id === activePlanId ? activePlanCreatedAt : now,
+      updatedAt: now,
+      legacy: metrics.policy.evidenceCertainty === "legacy",
+    };
+  }
+
+  function handleSaveSession() {
+    const substitutions = Object.fromEntries(displayedPlan.map((day, index) => [index, day]));
+    const legacyOk = activeForm.goal === "weight_loss"
+      ? saveSession({ form: activeForm, planMode, variationSeed, substitutions })
+      : false;
+    const current = currentPlanDocument();
+    const workspacePlans = current
+      ? [...archivedPlans.filter((plan) => plan.id !== current.id), current].slice(-50)
+      : archivedPlans.slice(-50);
+    const workspaceOk = current
+      ? saveWorkspace({
+          version: 2,
+          savedAt: new Date().toISOString(),
+          activePlanId: current.id,
+          plans: workspacePlans,
+        })
+      : false;
+    if (legacyOk || workspaceOk) {
       setSavedAt(new Date().toISOString());
       setJustSaved(true);
       window.setTimeout(() => setJustSaved(false), 3000);
@@ -141,37 +237,137 @@ export default function DietPlanner() {
 
   function handleClearSession() {
     clearSession();
+    clearWorkspace();
     setSavedAt(null);
     setJustSaved(false);
   }
 
   function handleRestoreSession(session: StoredSession) {
-    setForm(session.form);
-    setSubmittedForm(session.form);
-    setMetrics(calculateMetrics(session.form));
+    const restoredForm = { ...session.form, goal: "weight_loss" as const, goalSelectionSource: "restored" as const };
+    const restoredMetrics = calculateMetrics(restoredForm);
+    const generated = ensurePlanIdentity(buildWeeklyPlan(restoredForm, restoredMetrics, session.planMode, session.variationSeed));
+    const restoredPlan = generated.map((day, index) => ensurePlanIdentity([session.substitutions[index] ?? day])[0]);
+    setForm(restoredForm);
+    setSubmittedForm(restoredForm);
+    setMetrics(restoredMetrics);
     setPlanMode(session.planMode);
     setVariationSeed(session.variationSeed);
-    setSubstitutions(session.substitutions ?? {});
+    setBaselinePlan(structuredClone(restoredPlan));
+    setPlanHistory(createHistory(restoredPlan));
     setActiveDay(0);
     setStep(4);
     setError("");
     setSavedAt(session.savedAt);
+    setActivePlanId(`legacy-${Date.parse(session.savedAt) || Date.now()}`);
+    setActivePlanCreatedAt(session.savedAt);
+    setArchivedPlans([]);
+    setMeasurements([]);
+    setAdjustmentProposal(null);
+    setLastAdjustmentAt(undefined);
+    setStartingTargetCalories(restoredMetrics.targetCalories);
   }
 
-  const projection = useMemo(() => {
-    if (!metrics || !submittedForm) return [];
-    const start = toNumber(submittedForm.weight);
-    const target = toNumber(submittedForm.targetWeight);
-    return [0, 4, 8, 12].map((week) => ({
-      week,
-      weight: Math.max(target, start - metrics.weeklyPace * week),
-    }));
-  }, [metrics, submittedForm]);
+  function handleRestoreWorkspace(workspace: StoredWorkspace) {
+    const active = workspace.plans.find((plan) => plan.id === workspace.activePlanId) ?? workspace.plans.at(-1);
+    if (!active) return;
+    setArchivedPlans(workspace.plans.filter((plan) => plan.id !== active.id));
+    setActivePlanId(active.id);
+    setActivePlanCreatedAt(active.createdAt);
+    restoreArchivedPlan(active);
+    setSavedAt(workspace.savedAt);
+  }
 
-  function updateForm<K extends keyof PlannerForm>(
-    key: K,
-    value: PlannerForm[K],
-  ) {
+  function requestGoalChange(goal: Goal, source: "guided" | "direct") {
+    if (goal === form.goal) {
+      setForm((current) => ({ ...current, goalSelectionSource: source }));
+      return;
+    }
+    if (metrics && submittedForm) {
+      setPendingGoal({ goal, source });
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      goal,
+      goalSelectionSource: source,
+      targetWeight: goal === "weight_loss"
+        ? String(Math.max(40, Number(current.weight) - 5))
+        : String(Math.min(300, Number(current.weight) + 5)),
+    }));
+    setError("");
+  }
+
+  function confirmGoalSwitch() {
+    if (!pendingGoal) return;
+    const current = currentPlanDocument(
+      `نسخهٔ ${goalCopy[submittedForm?.goal ?? form.goal].title}`,
+      `version-${Date.now()}`,
+      activePlanId,
+    );
+    if (current) setArchivedPlans((plans) => [...plans.filter((plan) => plan.id !== current.id), current].slice(-49));
+    setForm((currentForm) => ({
+      ...currentForm,
+      goal: pendingGoal.goal,
+      goalSelectionSource: pendingGoal.source,
+      targetWeight: pendingGoal.goal === "weight_loss"
+        ? String(Math.max(40, Number(currentForm.weight) - 5))
+        : String(Math.min(300, Number(currentForm.weight) + 5)),
+    }));
+    setSubmittedForm(null);
+    setMetrics(null);
+    setPlanHistory(null);
+    setBaselinePlan([]);
+    setActiveDay(0);
+    setStep(1);
+    setPendingGoal(null);
+    setError("");
+    setActivePlanId(`plan-${Date.now()}`);
+    setActivePlanCreatedAt(new Date().toISOString());
+    setMeasurements([]);
+    setAdjustmentProposal(null);
+    setLastAdjustmentAt(undefined);
+    setStartingTargetCalories(null);
+    setComparisonPlanId(null);
+  }
+
+  function restoreArchivedPlan(plan: PlanDocument) {
+    setForm(structuredClone(plan.form));
+    setSubmittedForm(structuredClone(plan.form));
+    setMetrics(structuredClone(plan.calculation));
+    setPlanMode(plan.planMode);
+    setVariationSeed(plan.variationSeed);
+    setBaselinePlan(structuredClone(plan.days));
+    setPlanHistory(createHistory(plan.days));
+    setActiveDay(0);
+    setStep(4);
+    setLiveAnnouncement(`نسخهٔ ${plan.name} باز شد.`);
+    setActivePlanId(plan.id);
+    setActivePlanCreatedAt(plan.createdAt);
+    setMeasurements(structuredClone(plan.measurements ?? []));
+    setAdjustmentProposal(structuredClone(plan.adjustmentProposals?.at(-1) ?? null));
+    setLastAdjustmentAt(plan.lastAdjustmentAt);
+    setStartingTargetCalories(plan.startingTargetCalories ?? plan.calculation.targetCalories);
+    setComparisonPlanId(null);
+  }
+
+  function openArchivedPlan(plan: PlanDocument) {
+    const current = currentPlanDocument(
+      `نسخهٔ حفظ‌شده پیش از بازکردن ${plan.name}`,
+      activePlanId,
+      plan.id,
+    );
+    if (current) {
+      setArchivedPlans((plans) => [
+        ...plans.filter((item) => item.id !== plan.id && item.id !== current.id),
+        current,
+      ].slice(-49));
+    } else {
+      setArchivedPlans((plans) => plans.filter((item) => item.id !== plan.id));
+    }
+    restoreArchivedPlan(plan);
+  }
+
+  function updateForm<K extends keyof PlannerForm>(key: K, value: PlannerForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
     setError("");
   }
@@ -206,28 +402,78 @@ export default function DietPlanner() {
       setError(validationMessage);
       return;
     }
+    const screening = screenSafety(form);
+    if (screening.blocked) {
+      setError(screening.reasons[0] ?? "پیش از ساخت برنامه، بررسی حرفه‌ای لازم است.");
+      return;
+    }
 
-    const calculated = calculateMetrics(form);
+    const calculated = calculateCurrentMetrics(form);
+    const calculationScopeIssue = getCalculationScopeIssue(form, calculated);
+    if (calculationScopeIssue) {
+      setError(calculationScopeIssue);
+      return;
+    }
     const preferredMode: PlanMode =
       form.cookingTime === "15"
         ? "quick"
         : form.mealPrep === "batch"
           ? "batch"
-          : form.dietStyle === "highProtein"
+          : form.dietStyle === "highProtein" || form.goal === "muscle_gain"
             ? "protein"
             : "variety";
+    const nextSeed = variationSeed + 1;
+    const submitted = { ...structuredClone(form), allergies: [...form.allergies] };
+    const plan = ensurePlanIdentity(buildWeeklyPlan(submitted, calculated, preferredMode, nextSeed));
+
+    if (!metrics) {
+      setActivePlanId(`plan-${Date.now()}`);
+      setActivePlanCreatedAt(new Date().toISOString());
+    }
 
     setMetrics(calculated);
-    setSubmittedForm({ ...form, allergies: [...form.allergies] });
+    setSubmittedForm(submitted);
     setPlanMode(preferredMode);
-    setVariationSeed((current) => current + 1);
+    setVariationSeed(nextSeed);
+    setBaselinePlan(structuredClone(plan));
+    setPlanHistory(createHistory(plan));
     setActiveDay(0);
-    setSubstitutions({});
     setError("");
-    window.setTimeout(
-      () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
-      80,
+    setStartingTargetCalories(calculated.targetCalories);
+    setMeasurements([]);
+    setAdjustmentProposal(null);
+    setLastAdjustmentAt(undefined);
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+  }
+
+  function regeneratePlan(nextMode = planMode, nextSeed = variationSeed + 1) {
+    if (!metrics || !submittedForm) return;
+    const plan = ensurePlanIdentity(buildWeeklyPlan(submittedForm, metrics, nextMode, nextSeed));
+    setPlanMode(nextMode);
+    setVariationSeed(nextSeed);
+    setBaselinePlan(structuredClone(plan));
+    setPlanHistory(createHistory(plan));
+    setLiveAnnouncement("چیدمان تازه ساخته شد؛ نسخهٔ قبلی فقط در صورت ذخیرهٔ نسخه نگه‌داری می‌شود.");
+  }
+
+  function handleAdjustmentDecision(proposal: AdjustmentProposal | null) {
+    setAdjustmentProposal(proposal);
+    if (!proposal || (proposal.status !== "accepted" && proposal.status !== "modified") || !metrics || !submittedForm) return;
+    const snapshot = currentPlanDocument(
+      `پیش از تنظیم روند — ${new Date().toLocaleDateString("fa-IR")}`,
+      `version-${Date.now()}`,
+      activePlanId,
     );
+    if (snapshot) setArchivedPlans((plans) => [...plans.filter((plan) => plan.id !== snapshot.id), snapshot].slice(-49));
+    const nextMetrics = applyReviewedEnergyAdjustment(submittedForm, metrics, proposal.proposedCaloriesDelta, startingTargetCalories ?? metrics.targetCalories);
+    const nextSeed = variationSeed + 1;
+    const nextPlan = ensurePlanIdentity(buildWeeklyPlan(submittedForm, nextMetrics, planMode, nextSeed));
+    setMetrics(nextMetrics);
+    setVariationSeed(nextSeed);
+    setBaselinePlan(structuredClone(nextPlan));
+    setPlanHistory(createHistory(nextPlan));
+    setLastAdjustmentAt(new Date().toISOString());
+    setLiveAnnouncement(`تنظیم ${proposal.proposedCaloriesDelta >= 0 ? "+" : ""}${proposal.proposedCaloriesDelta} کیلوکالری با انتخاب شما اعمال و برنامه دوباره ساخته شد.`);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -240,15 +486,15 @@ export default function DietPlanner() {
     if (!metrics || !submittedForm) return "";
     const lines = [
       "برنامه هفتگی میزانه",
+      `هدف: ${goalCopy[submittedForm.goal].title}`,
       `هدف روزانه: ${formatNumber(metrics.targetCalories)} کیلوکالری`,
-      `پروتئین: ${formatNumber(metrics.protein)} گرم`,
+      `بازهٔ عدم‌قطعیت نگهدارنده: ±${formatNumber(metrics.uncertaintyKcal)} کیلوکالری`,
+      `پروتئین: ${formatNumber(metrics.proteinMin)} تا ${formatNumber(metrics.proteinMax)} گرم`,
+      `سیاست محاسبه: ${metrics.policy.calculationPolicyId}`,
       "",
       ...displayedPlan.flatMap((day) => [
         day.label,
-        ...day.meals.map(
-          (meal) =>
-            `${meal.displaySlot}: ${meal.title} — ${meal.serving}`,
-        ),
+        ...day.meals.map((meal) => `${meal.displaySlot}${meal.mealTime ? ` (${meal.mealTime})` : ""}: ${meal.title} — ${meal.serving}`),
         "",
       ]),
     ];
@@ -256,9 +502,7 @@ export default function DietPlanner() {
   }
 
   function downloadPlan() {
-    const blob = new Blob([planAsText()], {
-      type: "text/plain;charset=utf-8",
-    });
+    const blob = new Blob([planAsText()], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -269,11 +513,7 @@ export default function DietPlanner() {
 
   async function copyShoppingList() {
     const text = shoppingGroups
-      .flatMap((group) => [
-        group.title,
-        ...group.items.map((item) => `• ${item}`),
-        "",
-      ])
+      .flatMap((group) => [group.title, ...group.items.map((item) => `• ${item}`), ""])
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
@@ -282,6 +522,89 @@ export default function DietPlanner() {
     } catch {
       setCopyState("idle");
     }
+  }
+
+  function undoPlan() {
+    setPlanHistory((current) => current ? undoHistory(current) : current);
+    setLiveAnnouncement("آخرین ویرایش واگرد شد.");
+  }
+
+  function redoPlan() {
+    setPlanHistory((current) => current ? redoHistory(current) : current);
+    setLiveAnnouncement("ویرایش دوباره اعمال شد.");
+  }
+
+  function resetMeal(instanceId: string) {
+    if (!selectedDay) return;
+    const baselineDay = baselinePlan.find((day) => day.id === selectedDay.id) ?? baselinePlan[activeDay];
+    const currentIndex = selectedDay.meals.findIndex((meal) => meal.instanceId === instanceId);
+    const baselineMeal = baselineDay?.meals.find((meal) => meal.instanceId === instanceId) ?? baselineDay?.meals[currentIndex];
+    if (!baselineMeal || currentIndex < 0) return;
+    const meals = selectedDay.meals.map((meal, index) => index === currentIndex ? structuredClone(baselineMeal) : meal);
+    replaceDay(activeDay, recalculateDay({ ...selectedDay, meals }), "وعده به نسخهٔ اولیه بازگشت و جمع روز دوباره محاسبه شد.");
+  }
+
+  function resetDay() {
+    const baselineDay = baselinePlan.find((day) => day.id === selectedDay?.id) ?? baselinePlan[activeDay];
+    if (!baselineDay) return;
+    replaceDay(activeDay, structuredClone(baselineDay), "روز به نسخهٔ اولیه بازگشت.");
+  }
+
+  function resetWholePlan() {
+    if (!baselinePlan.length) return;
+    commitPlan(structuredClone(baselinePlan), "کل برنامه به نسخهٔ اولیه بازگشت.");
+    setActiveDay(0);
+  }
+
+  function duplicateActiveDay() {
+    if (!selectedDay) return;
+    const number = displayedPlan.length + 1;
+    const copy = duplicateDay(selectedDay, `custom-day-${Date.now()}`, `روز کپی ${formatNumber(number)}`);
+    commitPlan([...displayedPlan, copy], "یک نسخه از روز به انتهای برنامه افزوده شد.");
+    setActiveDay(displayedPlan.length);
+  }
+
+  function copyActiveDay(targetDayId: string) {
+    if (!selectedDay) return;
+    const targetIndex = displayedPlan.findIndex((day) => day.id === targetDayId);
+    if (targetIndex < 0) return;
+    const next = displayedPlan.map((day, index) => index === targetIndex ? copyDayTo(selectedDay, day) : day);
+    commitPlan(next, "محتوای روز روی روز مقصد کپی شد.");
+  }
+
+  function toggleFavourite(foodId: string) {
+    const apply = (current: PlannerForm) => ({
+      ...current,
+      favourites: current.favourites.includes(foodId)
+        ? current.favourites.filter((id) => id !== foodId)
+        : [...current.favourites, foodId],
+    });
+    setForm(apply);
+    setSubmittedForm((current) => current ? apply(current) : current);
+    setLiveAnnouncement("فهرست غذاهای محبوب به‌روزرسانی شد.");
+  }
+
+  function toggleHiddenFood(foodId: string) {
+    const apply = (current: PlannerForm) => ({
+      ...current,
+      hiddenFoods: current.hiddenFoods.includes(foodId)
+        ? current.hiddenFoods.filter((id) => id !== foodId)
+        : [...current.hiddenFoods, foodId],
+    });
+    setForm(apply);
+    setSubmittedForm((current) => current ? apply(current) : current);
+    setLiveAnnouncement("ترجیحات پیشنهاد غذا به‌روزرسانی شد.");
+  }
+
+  function saveNamedVersion() {
+    const plan = currentPlanDocument(
+      `نسخهٔ ${goalCopy[activeForm.goal].title} — ${new Date().toLocaleDateString("fa-IR")}`,
+      `version-${Date.now()}`,
+      activePlanId,
+    );
+    if (!plan) return;
+    setArchivedPlans((plans) => [...plans, plan].slice(-49));
+    setLiveAnnouncement("نسخه در فضای کاری جاری حفظ شد؛ برای ماندگاری روی دستگاه، گزینهٔ ذخیره را هم بزنید.");
   }
 
   return (
@@ -308,7 +631,20 @@ export default function DietPlanner() {
         </a>
       </header>
 
-      <RestoreSessionPrompt onRestore={handleRestoreSession} />
+      <RestoreSessionPrompt onRestore={handleRestoreSession} onRestoreWorkspace={handleRestoreWorkspace} />
+
+      {pendingGoal && (
+        <div className="dialog-backdrop" role="presentation">
+          <section className="goal-switch-dialog" role="dialog" aria-modal="true" aria-labelledby="goal-switch-title">
+            <h2 id="goal-switch-title">هدف برنامه تغییر می‌کند</h2>
+            <p>هدف فعلی «{goalCopy[submittedForm?.goal ?? form.goal].title}» به «{goalCopy[pendingGoal.goal].title}» تغییر می‌کند. برنامهٔ فعلی به‌عنوان یک نسخهٔ جدا حفظ می‌شود و اطلاعات مشترک دوباره استفاده خواهند شد.</p>
+            <p className="form-note">هدف تازه محاسبه، هشدارها و اولویت‌های پیگیری متفاوتی دارد و برنامهٔ فعال را بی‌صدا بازنویسی نمی‌کند.</p>
+            <div className="dialog-actions"><button type="button" onClick={() => setPendingGoal(null)}>انصراف</button><button type="button" className="continue-button" onClick={confirmGoalSwitch}>حفظ نسخه و ساخت برنامهٔ جدید</button></div>
+          </section>
+        </div>
+      )}
+
+      <p className="sr-only" role="status" aria-live="polite">{liveAnnouncement}</p>
 
       <section className="hero" id="top">
         <div className="hero-copy">
@@ -322,8 +658,7 @@ export default function DietPlanner() {
             <em>متعادل</em> و هفتگی
           </h1>
           <p className="hero-lead">
-            از محاسبه نیاز روزانه تا هفت روز وعده متنوع، فهرست خرید،
-            آماده‌سازی و جایگزین‌های هم‌گروه؛ همه‌چیز روشن و قابل اجراست.
+            سه مسیر جدا برای کاهش وزن، افزایش حجم عضله و افزایش وزن سالم؛ همراه با برنامهٔ هفتگی قابل ویرایش، فهرست خرید، غربالگری ایمنی و پیگیری روند.
           </p>
           <div className="hero-actions">
             <a className="primary-cta" href="#calculator">
@@ -376,7 +711,7 @@ export default function DietPlanner() {
               </span>
               <h2 id="calculator-title">{stepTitles[step - 1]}</h2>
             </div>
-            <span className="privacy-note">بدون ذخیره اطلاعات</span>
+            <span className="privacy-note">ذخیره فقط با انتخاب شما</span>
           </div>
 
           <ol className="stepper" aria-label="مراحل ساخت برنامه">
@@ -399,6 +734,12 @@ export default function DietPlanner() {
           <div className="wizard-panel" key={step}>
             {step === 1 && (
               <>
+                <GoalSelection
+                  form={form}
+                  onGoalChange={requestGoalChange}
+                  onResistanceTrainingChange={(status) => updateForm("resistanceTraining", status)}
+                />
+
                 <div className="field-grid field-grid--three">
                   <label>
                     <span>سن</span>
@@ -539,28 +880,41 @@ export default function DietPlanner() {
                   </label>
                 </div>
 
-                <fieldset>
-                  <legend>ریتم کاهش دلخواه</legend>
-                  <div className="choice-grid choice-grid--three">
-                    {(["0.25", "0.5", "0.75"] as const).map((pace) => (
-                      <button
-                        className={
-                          form.pace === pace ? "choice is-selected" : "choice"
-                        }
-                        type="button"
-                        aria-pressed={form.pace === pace}
-                        onClick={() => updateForm("pace", pace)}
-                        key={pace}
-                      >
-                        <strong>{pace.replace(".", "٫")} کیلو</strong>
-                        <small>در هفته</small>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="field-hint">
-                    کسری انرژی به حداکثر ۲۰٪ نیاز روزانه محدود می‌شود.
-                  </p>
-                </fieldset>
+                {form.goal === "weight_loss" && (
+                  <fieldset>
+                    <legend>شروع محافظه‌کارانهٔ کاهش انرژی</legend>
+                    <div className="segmented segmented--two">
+                      <button type="button" aria-pressed={form.startingAdjustmentPreference === "gentle"} className={form.startingAdjustmentPreference === "gentle" ? "is-selected" : ""} onClick={() => updateForm("startingAdjustmentPreference", "gentle")}>ملایم‌تر</button>
+                      <button type="button" aria-pressed={form.startingAdjustmentPreference === "standard"} className={form.startingAdjustmentPreference === "standard" ? "is-selected" : ""} onClick={() => updateForm("startingAdjustmentPreference", "standard")}>استاندارد محافظه‌کارانه</button>
+                    </div>
+                    <p className="field-hint">شروع برنامه از مقدار کمترِ ۱۵٪ نیاز نگهدارنده یا ۵۰۰ کیلوکالری استفاده می‌کند؛ نتیجهٔ وزن تضمین نمی‌شود و با روند چند هفته‌ای بازبینی خواهد شد.</p>
+                  </fieldset>
+                )}
+
+                {form.goal === "muscle_gain" && (
+                  <section className="goal-specific-fields" aria-labelledby="muscle-fields-title">
+                    <h3 id="muscle-fields-title">اطلاعات تمرین مقاومتی</h3>
+                    <div className="field-grid field-grid--three">
+                      <label><span>وضعیت تمرین</span><select value={form.resistanceTraining} onChange={(event) => updateForm("resistanceTraining", event.target.value as PlannerForm["resistanceTraining"])}><option value="current">اکنون منظم تمرین می‌کنم</option><option value="starting">هم‌زمان شروع می‌کنم</option><option value="none">تمرین مقاومتی ندارم</option></select></label>
+                      <label><span>جلسه در هفته</span><span className="input-wrap"><input type="number" min="0" max="14" value={form.trainingDays} onChange={(event) => updateForm("trainingDays", event.target.value)} /><small>جلسه</small></span></label>
+                      <label><span>سابقهٔ تمرین</span><select value={form.trainingExperience} onChange={(event) => updateForm("trainingExperience", event.target.value as PlannerForm["trainingExperience"])}><option value="beginner">تازه‌کار</option><option value="intermediate">متوسط</option><option value="advanced">پیشرفته</option></select></label>
+                    </div>
+                    <label><span>روند عملکرد تمرینی</span><select value={form.trainingProgress} onChange={(event) => updateForm("trainingProgress", event.target.value as PlannerForm["trainingProgress"])}><option value="progressing">در حال پیشرفت</option><option value="plateau">متوقف یا افت‌کرده</option><option value="unknown">هنوز مشخص نیست</option></select></label>
+                    <p className="field-hint">تغذیه به‌تنهایی افزایش معنادار حجم عضله را تضمین نمی‌کند؛ تمرین مقاومتی و ریکاوری بخش ضروری این هدف‌اند.</p>
+                  </section>
+                )}
+
+                {form.goal === "healthy_weight_gain" && (
+                  <section className="goal-specific-fields" aria-labelledby="gain-fields-title">
+                    <h3 id="gain-fields-title">اشتها و تحمل غذا</h3>
+                    <div className="field-grid field-grid--three">
+                      <label><span>اشتها</span><select value={form.appetite} onChange={(event) => updateForm("appetite", event.target.value as PlannerForm["appetite"])}><option value="low">کم</option><option value="normal">معمولی</option><option value="high">زیاد</option></select></label>
+                      <label><span>تحمل گوارشی</span><select value={form.digestiveTolerance} onChange={(event) => updateForm("digestiveTolerance", event.target.value as PlannerForm["digestiveTolerance"])}><option value="good">خوب</option><option value="some_issues">گاهی مشکل دارم</option><option value="poor">ضعیف</option></select></label>
+                      <label className="check-chip"><input type="checkbox" checked={form.earlySatiety} onChange={(event) => updateForm("earlySatiety", event.target.checked)} /><span>زود سیر می‌شوم</span></label>
+                    </div>
+                    <p className="field-hint">افزایش وزن می‌تواند ترکیبی از بافت بدون چربی، چربی، آب و گلیکوژن باشد. برنامه بر افزایش تدریجی و غذاهای مغذی تمرکز می‌کند.</p>
+                  </section>
+                )}
 
                 <fieldset>
                   <legend>تعداد وعده‌های روزانه</legend>
@@ -755,6 +1109,15 @@ export default function DietPlanner() {
                   />
                 </label>
 
+                {form.goal === "muscle_gain" && (
+                  <label className="training-acknowledgement">
+                    <input type="checkbox" checked={form.acknowledgesTrainingRequirement} onChange={(event) => updateForm("acknowledgesTrainingRequirement", event.target.checked)} />
+                    <span>می‌دانم که تمرین مقاومتی برای افزایش معنادار حجم عضله ضروری است و همهٔ وزن اضافه‌شده عضله نخواهد بود.</span>
+                  </label>
+                )}
+
+                <SafetyScreenFields form={form} result={safetyResult} onChange={(next) => { setForm(next); setError(""); }} />
+
                 <div className="review-card">
                   <div>
                     <span>نیاز نگهدارنده</span>
@@ -765,17 +1128,14 @@ export default function DietPlanner() {
                     <strong>{formatNumber(previewMetrics.targetCalories)}</strong>
                   </div>
                   <div>
-                    <span>زمان تخمینی</span>
-                    <strong>
-                      {previewMetrics.estimatedWeeks
-                        ? `${formatNumber(previewMetrics.estimatedWeeks)} هفته`
-                        : "—"}
-                    </strong>
+                    <span>عدم‌قطعیت برآورد</span>
+                    <strong>±{formatNumber(previewMetrics.uncertaintyKcal)}</strong>
+                    <small>کیلوکالری</small>
                   </div>
                 </div>
 
                 <p className="form-note">
-                  خروجی برای برنامه‌ریزی غذایی بزرگسالان سالم طراحی شده است.
+                  خروجی فقط برای برنامه‌ریزی عمومی بزرگسالان در محدودهٔ ایمن است؛ تشخیص، درمان، تعیین هدف پزشکی یا تغییر دارو انجام نمی‌دهد.
                 </p>
               </>
             )}
@@ -816,12 +1176,9 @@ export default function DietPlanner() {
           <div className="section-wrap">
             <div className="result-hero">
               <div>
-                <p className="section-kicker">نسخه شخصی شما</p>
-                <h2 id="results-title">هفت روز روشن و قابل اجرا</h2>
-                <p>
-                  برنامه براساس هدف انرژی، سبک غذایی، حساسیت‌ها، زمان آشپزی و
-                  ریتم گرسنگی شما چیده شده است.
-                </p>
+                <p className="section-kicker">نسخهٔ شخصی شما — {goalCopy[submittedForm.goal].title}</p>
+                <h2 id="results-title">هفت روز روشن، قابل ویرایش و هدف‌محور</h2>
+                <p>{goalCopy[submittedForm.goal].short} برنامه براساس برآورد انرژی، ترجیحات، حساسیت‌ها، مرزهای ایمنی و اطلاعات مخصوص همین هدف چیده شده است.</p>
               </div>
               <div className="result-actions">
                 <button type="button" onClick={() => window.print()}>
@@ -832,6 +1189,7 @@ export default function DietPlanner() {
                   دریافت متن برنامه
                   <span aria-hidden="true">↓</span>
                 </button>
+                <button type="button" onClick={saveNamedVersion}>ذخیرهٔ نسخه</button>
               </div>
             </div>
 
@@ -841,6 +1199,15 @@ export default function DietPlanner() {
               savedAt={savedAt}
               justSaved={justSaved}
             />
+
+            <section className="plan-version-panel" aria-label="هدف و نسخه‌های برنامه">
+              <div><span>هدف فعال</span><strong>{goalCopy[submittedForm.goal].title}</strong><small>{metrics.policy.calculationPolicyId}</small></div>
+              <div className="compact-goal-switch" role="group" aria-label="ساخت برنامه با هدف دیگر">
+                {(["weight_loss", "muscle_gain", "healthy_weight_gain"] as Goal[]).map((goal) => <button key={goal} type="button" aria-pressed={goal === submittedForm.goal} onClick={() => requestGoalChange(goal, "direct")}>{goalCopy[goal].title}</button>)}
+              </div>
+              {archivedPlans.length > 0 && <div className="archived-plans"><span>نسخه‌های حفظ‌شده</span>{archivedPlans.map((plan) => <div className="archived-plan-row" key={plan.id}><button type="button" onClick={() => openArchivedPlan(plan)}>بازکردن {plan.name}</button><button type="button" aria-pressed={comparisonPlanId === plan.id} onClick={() => setComparisonPlanId((current) => current === plan.id ? null : plan.id)}>مقایسه</button></div>)}</div>}
+              {comparisonPlan && comparisonSummary && <section className="version-comparison" aria-label="مقایسهٔ نسخه‌های برنامه"><div><span>نسخهٔ فعال</span><strong>{goalCopy[submittedForm.goal].title}</strong><small>{formatNumber(metrics.targetCalories)} کیلوکالری هدف روزانه</small><small>{formatNumber(planSummary.averageCalories)} میانگین برنامه</small></div><div><span>{comparisonPlan.name}</span><strong>{goalCopy[comparisonPlan.goal].title}</strong><small>{formatNumber(comparisonPlan.calculation.targetCalories)} کیلوکالری هدف روزانه</small><small>{formatNumber(comparisonSummary.averageCalories)} میانگین برنامه</small></div><p>تفاوت هدف انرژی: {formatNumber(comparisonPlan.calculation.targetCalories - metrics.targetCalories)} کیلوکالری. این مقایسه فقط تفاوت نسخه‌ها را نشان می‌دهد و نسخه‌ای را خودکار جایگزین نمی‌کند.</p></section>}
+            </section>
 
             <article className="result-block numbers-block">
               <div className="block-heading">
@@ -853,9 +1220,9 @@ export default function DietPlanner() {
 
               <div className="metric-grid">
                 <div>
-                  <span>سوخت‌وساز استراحت</span>
-                  <strong>{formatNumber(metrics.bmr)}</strong>
-                  <small>کیلوکالری</small>
+                  <span>برآورد معادلهٔ انرژی</span>
+                  <strong>{formatNumber(metrics.maintenanceCalories)}</strong>
+                  <small>کیلوکالری نگهدارنده</small>
                 </div>
                 <div>
                   <span>نیاز نگهدارنده</span>
@@ -875,18 +1242,11 @@ export default function DietPlanner() {
               </div>
 
               <div className="equation-strip">
-                <span>
-                  کسری روزانه <strong>{formatNumber(metrics.deficit)}</strong>
-                </span>
-                <span>
-                  ریتم هفتگی{" "}
-                  <strong>{formatDecimal(metrics.weeklyPace)} کیلوگرم</strong>
-                </span>
-                <span>
-                  زمان تخمینی{" "}
-                  <strong>{formatNumber(metrics.estimatedWeeks)} هفته</strong>
-                </span>
+                <span>{metrics.energyAdjustment < 0 ? "کسری شروع" : "مازاد شروع"} <strong>{metrics.energyAdjustment > 0 ? "+" : ""}{formatNumber(metrics.energyAdjustment)} کیلوکالری</strong></span>
+                <span>عدم‌قطعیت نگهدارنده <strong>±{formatNumber(metrics.uncertaintyKcal)} کیلوکالری</strong></span>
+                <span>بازهٔ پروتئین <strong>{formatNumber(metrics.proteinMin)} تا {formatNumber(metrics.proteinMax)} گرم</strong></span>
               </div>
+              <div className="calculation-disclosure"><strong>این عدد نسخهٔ پزشکی یا نتیجهٔ تضمین‌شده نیست.</strong><span>معادله: {metrics.policy.energyEquationId} — بازبینی تا {metrics.policy.reviewExpiresAt}</span>{metrics.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>
             </article>
 
             <article className="result-block nutrition-block">
@@ -976,15 +1336,12 @@ export default function DietPlanner() {
                 <span>۰۳</span>
                 <div>
                   <p>طراحی برنامه هفتگی</p>
-                  <h3>هفت روز، با امکان چیدمان تازه</h3>
+                  <h3>روزهای برنامه، با امکان چیدمان تازه</h3>
                 </div>
                 <button
                   className="shuffle-button"
                   type="button"
-                  onClick={() => {
-                    setVariationSeed((current) => current + 1);
-                    setSubstitutions({});
-                  }}
+                  onClick={() => regeneratePlan(planMode, variationSeed + 1)}
                 >
                   چیدمان تازه
                   <span aria-hidden="true">↻</span>
@@ -997,16 +1354,21 @@ export default function DietPlanner() {
                     className={planMode === mode.id ? "is-selected" : ""}
                     type="button"
                     aria-pressed={planMode === mode.id}
-                    onClick={() => {
-                      setPlanMode(mode.id);
-                      setSubstitutions({});
-                    }}
+                    onClick={() => regeneratePlan(mode.id, variationSeed + 1)}
                     key={mode.id}
                   >
                     <strong>{mode.title}</strong>
                     <small>{mode.note}</small>
                   </button>
                 ))}
+              </div>
+
+              <div className="weekly-nutrition-summary" aria-label="خلاصهٔ تغذیه‌ای برنامه">
+                <div><span>میانگین انرژی روزانه</span><strong>{formatNumber(planSummary.averageCalories)} کیلوکالری</strong></div>
+                <div><span>انرژی کل برنامه</span><strong>{formatNumber(planSummary.weeklyCalories)} کیلوکالری</strong></div>
+                <div><span>میانگین پروتئین</span><strong>{formatNumber(planSummary.averageProtein)} گرم</strong></div>
+                <div><span>میانگین فیبر</span><strong>{formatNumber(planSummary.averageFiber)} گرم</strong></div>
+                <p>{planSummary.nutritionCompleteness === "complete" ? "داده‌های تغذیه‌ای کامل‌اند." : planSummary.nutritionCompleteness === "user_entered" ? "خلاصه شامل داده‌های واردشده توسط کاربر است." : "اطلاعات تغذیه‌ای برخی غذاها ناقص است."}</p>
               </div>
 
               <div className="weekly-table-wrap">
@@ -1119,6 +1481,32 @@ export default function DietPlanner() {
                       onCancel={() => setSubstitutionTarget(null)}
                     />
                   )}
+
+                  {compatibilityIssues.length > 0 && (
+                    <section className="compatibility-summary" aria-label="پیامد ویرایش‌ها">
+                      <strong>پیامدهای فعلی برنامه</strong>
+                      <ul>{compatibilityIssues.slice(0, 8).map((issue, index) => <li key={`${issue.dayId}-${issue.mealInstanceId ?? index}-${issue.kind}`}>{issue.message}</li>)}</ul>
+                    </section>
+                  )}
+
+                  <MealEditor
+                    day={selectedDay}
+                    canUndo={Boolean(planHistory?.past.length)}
+                    canRedo={Boolean(planHistory?.future.length)}
+                    favourites={activeForm.favourites}
+                    hiddenFoods={activeForm.hiddenFoods}
+                    onChange={(next, announcement) => replaceDay(activeDay, next, announcement)}
+                    onUndo={undoPlan}
+                    onRedo={redoPlan}
+                    onResetMeal={resetMeal}
+                    onResetDay={resetDay}
+                    onResetPlan={resetWholePlan}
+                    onDuplicateDay={duplicateActiveDay}
+                    onCopyDay={copyActiveDay}
+                    otherDays={displayedPlan.filter((_, index) => index !== activeDay).map((day) => ({ id: day.id, label: day.label }))}
+                    onToggleFavourite={toggleFavourite}
+                    onHideFood={toggleHiddenFood}
+                  />
                 </div>
               )}
             </article>
@@ -1225,71 +1613,30 @@ export default function DietPlanner() {
             </article>
 
             <article className="result-block progress-block">
-              <div className="block-heading">
-                <span>۰۶</span>
-                <div>
-                  <p>پیگیری بدون وسواس</p>
-                  <h3>مسیر تخمینی و ریتم هفتگی</h3>
-                </div>
-              </div>
-
-              <div className="progress-layout">
-                <div className="projection-card">
-                  <div>
-                    <p>برآورد روند</p>
-                    <small>تخمینی است و خط مستقیم تضمین‌شده نیست.</small>
-                  </div>
-                  <div className="projection-bars">
-                    {projection.map((item, index) => (
-                      <div key={item.week}>
-                        <span
-                          style={{
-                            height: `${Math.max(
-                              24,
-                              100 -
-                                (index / Math.max(1, projection.length - 1)) *
-                                  58,
-                            )}%`,
-                          }}
-                        />
-                        <strong>{formatDecimal(item.weight)}</strong>
-                        <small>
-                          {item.week === 0
-                            ? "شروع"
-                            : `هفته ${formatNumber(item.week)}`}
-                        </small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rhythm-card">
-                  <p>ریتم شخصی شما</p>
-                  <dl>
-                    <div>
-                      <dt>الگوی روز</dt>
-                      <dd>{dayPatternLabel(submittedForm.dayPattern)}</dd>
-                    </div>
-                    <div>
-                      <dt>آماده‌سازی</dt>
-                      <dd>{prepLabel(submittedForm.mealPrep)}</dd>
-                    </div>
-                    <div>
-                      <dt>خواب ثبت‌شده</dt>
-                      <dd>{sleepLabel(submittedForm.sleep)}</dd>
-                    </div>
-                    <div>
-                      <dt>نظم آب</dt>
-                      <dd>{waterLabel(submittedForm.water)}</dd>
-                    </div>
-                  </dl>
-                  <ul>
-                    <li>وزن‌کشی یک‌بار در هفته، در شرایط مشابه</li>
-                    <li>ثبت دور کمر هر چهار هفته</li>
-                    <li>میانگین هفتگی مهم‌تر از یک روز منفرد است</li>
-                    <li>۱۵۰ دقیقه فعالیت متوسط در هفته را هدف بگیر</li>
-                  </ul>
-                </div>
+              <ProgressTracker
+                goal={submittedForm.goal}
+                measurements={measurements}
+                onMeasurementsChange={setMeasurements}
+                onProposalChange={handleAdjustmentDecision}
+                decision={adjustmentProposal}
+                lastAdjustmentAt={lastAdjustmentAt}
+              />
+              {adjustmentProposal && (
+                <p className="form-note" role="status">وضعیت پیشنهاد: {adjustmentProposal.status === "accepted" ? "پذیرفته و در برنامه اعمال شد." : adjustmentProposal.status === "modified" ? "مقدار دلخواه شما اعمال شد." : adjustmentProposal.status === "rejected" ? "رد شد و برنامه تغییر نکرد." : "در انتظار تصمیم شما"}</p>
+              )}
+              <div className="rhythm-card">
+                <p>ریتم شخصی شما</p>
+                <dl>
+                  <div><dt>الگوی روز</dt><dd>{dayPatternLabel(submittedForm.dayPattern)}</dd></div>
+                  <div><dt>آماده‌سازی</dt><dd>{prepLabel(submittedForm.mealPrep)}</dd></div>
+                  <div><dt>خواب ثبت‌شده</dt><dd>{sleepLabel(submittedForm.sleep)}</dd></div>
+                  <div><dt>نظم آب</dt><dd>{waterLabel(submittedForm.water)}</dd></div>
+                </dl>
+                <ul>
+                  <li>روند چنداندازه‌گیری مهم‌تر از یک عدد منفرد است.</li>
+                  <li>پیشنهاد تغییر انرژی در هر بازبینی حداکثر ۱۰۰ کیلوکالری است.</li>
+                  <li>می‌توانید هر پیشنهاد را رد یا بعداً بازبینی کنید.</li>
+                </ul>
               </div>
             </article>
           </div>
@@ -1304,8 +1651,7 @@ export default function DietPlanner() {
               <h2>هر عدد، یک منطق روشن دارد</h2>
             </div>
             <p>
-              خروجی از ترکیب فرمول انرژی، کسری محافظه‌کارانه، کیفیت غذا،
-              پروتئین کافی و تنوع هفتگی ساخته می‌شود.
+              خروجی از برآورد نسخه‌دار انرژی، سیاست جداگانهٔ هر هدف، کیفیت غذا، مرزهای ایمنی و بازبینی مبتنی بر روند ساخته می‌شود.
             </p>
           </div>
 
@@ -1313,27 +1659,27 @@ export default function DietPlanner() {
             {[
               {
                 number: "۱",
-                title: "سوخت‌وساز استراحت",
-                formula: "۱۰×وزن + ۶٫۲۵×قد − ۵×سن",
-                copy: "فرمول Mifflin–St Jeor نقطه شروع برآورد انرژی است.",
+                title: "برآورد انرژی",
+                formula: "NASEM EER 2023",
+                copy: "سن، اندازهٔ بدن و فعالیت برای یک برآورد جمعیتی استفاده می‌شوند؛ خطای فردی صریحاً نمایش داده می‌شود.",
               },
               {
                 number: "۲",
-                title: "نیاز نگهدارنده",
-                formula: "سوخت‌وساز × ضریب فعالیت",
-                copy: "فعالیت روزانه فاصله میان استراحت و نیاز واقعی را تنظیم می‌کند.",
+                title: "سه سیاست جدا",
+                formula: "کسری یا مازاد نسخه‌دار",
+                copy: "کاهش وزن، حجم عضله و افزایش وزن برچسب‌های متفاوت یک فرمول نیستند و قواعد شروع و پایش مستقل دارند.",
               },
               {
                 number: "۳",
-                title: "هدف کاهش",
-                formula: "حداکثر ۲۰٪ کسری روزانه",
-                copy: "سرعت انتخابی کاربر با یک سقف محافظه‌کارانه محدود می‌شود.",
+                title: "مرز ایمنی",
+                formula: "غربالگری پیش از تولید",
+                copy: "شرایط پزشکی، کاهش وزن ناخواسته، خطر بازغذیه و مقادیر پرخطر فشار، قند یا چربی خون تولید عادی را متوقف می‌کنند.",
               },
               {
                 number: "۴",
-                title: "کیفیت برنامه",
-                formula: "پروتئین + فیبر + تنوع",
-                copy: "فقط انرژی مهم نیست؛ ترکیب وعده‌ها قابلیت اجرا را می‌سازد.",
+                title: "بازبینی روند",
+                formula: "چند اندازه‌گیری، تغییر کوچک",
+                copy: "یک عدد منفرد باعث تغییر خودکار نمی‌شود؛ پیشنهادها قابل ردند و عدم‌قطعیت حفظ می‌شود.",
               },
             ].map((item) => (
               <article key={item.number}>
@@ -1369,8 +1715,7 @@ export default function DietPlanner() {
             <p className="section-kicker">راهنمای استفاده</p>
             <h2>برنامه خوب، برنامه قابل تکرار است</h2>
             <p>
-              لازم نیست هر روز بی‌نقص باشد. از جدول هفتگی به‌عنوان نقشه استفاده
-              کن و با جایگزین‌های هم‌گروه، انعطاف را حفظ کن.
+              لازم نیست هر روز بی‌نقص باشد. برنامه را ویرایش کن، پیامد تغذیه‌ای هر تغییر را ببین و نسخه‌های مختلف را بدون از دست‌دادن هدف قبلی نگه دار.
             </p>
           </div>
           <div className="faq-list">
@@ -1399,8 +1744,7 @@ export default function DietPlanner() {
             <details>
               <summary>اگر یک وعده را نپسندیدم چه کنم؟</summary>
               <p>
-                از بخش جایگزین‌های هم‌گروه استفاده کن یا نام آن غذا را در فرم
-                ترجیحات بنویس و برنامه را دوباره بساز.
+                از جایگزین‌های توضیح‌دار استفاده کن یا ابزار ویرایش همان روز را باز کن؛ مقدار، نام، زمان، نوع وعده و دادهٔ غذای سفارشی قابل تغییر است و جمع برنامه دوباره محاسبه می‌شود.
               </p>
             </details>
             <details>
@@ -1409,6 +1753,18 @@ export default function DietPlanner() {
                 پس از سه تا چهار هفته، میانگین روند، گرسنگی، انرژی روزانه و
                 قابلیت اجرای وعده‌ها را با هدف اولیه مقایسه کن.
               </p>
+            </details>
+            <details>
+              <summary>تفاوت کاهش وزن، حجم عضله و افزایش وزن چیست؟</summary>
+              <p>کاهش وزن با کسری محافظه‌کارانه آغاز می‌شود؛ حجم عضله به تمرین مقاومتی و پایش عملکرد وابسته است؛ افزایش وزن بر اشتها، تحمل گوارشی و افزایش تدریجی انرژی تمرکز دارد.</p>
+            </details>
+            <details>
+              <summary>فشار، قند و چربی خون چگونه استفاده می‌شوند؟</summary>
+              <p>این داده‌ها فقط برای مرز ایمنی و توضیح عمومی‌اند. میزانه تشخیص نمی‌دهد، هدف ثابت درمانی نمی‌سازد و دارو را تغییر نمی‌دهد.</p>
+            </details>
+            <details>
+              <summary>جایگزینی غذا چگونه ارزیابی می‌شود؟</summary>
+              <p>انرژی، پروتئین، فیبر، نقش وعده، حساسیت، سبک غذایی و ترجیحات در نظر گرفته می‌شوند و دلیل نزدیک یا نامعادل بودن جایگزین نمایش داده می‌شود.</p>
             </details>
           </div>
         </div>
@@ -1423,7 +1779,8 @@ export default function DietPlanner() {
           </span>
         </a>
         <p>تعادل روشن، ریتم پایدار.</p>
-        <span>برای برنامه‌ریزی غذایی بزرگسالان سالم</span>
+        <span>برای برنامه‌ریزی عمومی بزرگسالان در محدودهٔ ایمن</span>
+        <a className="creator-credit" href="https://www.linkedin.com/in/hossein-karimi-8a452153/" target="_blank" rel="noreferrer">کاری از حسین کریمی</a>
       </footer>
     </main>
   );

@@ -8,7 +8,7 @@
 // fresh deploy is never masked by a stale cached bundle while online;
 // the cache is purely a fallback for when the network fetch fails.
 
-const CACHE_NAME = "mizaneh-shell-v1";
+const CACHE_NAME = "mizaneh-shell-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

@@ -1,9 +1,6 @@
-// Static food/config data for Mizaneh: meal catalogue, form option lists,
-// and reference content. No calculation or UI logic lives here — see
-// lib/nutrition/formulas.ts and lib/plan/build.ts.
-//
-// Extracted verbatim from the original DietPlanner.tsx (no meal, macro, or
-// label values were changed).
+// Static food/config data for Mizaneh: the preserved meal catalogue, form
+// defaults/options, and public source cards. New-plan calculations live in
+// lib/calculations; the legacy v1 calculation remains in lib/nutrition.
 
 import type {
   Activity,
@@ -15,6 +12,8 @@ import type {
 } from "@/lib/types";
 
 export const defaultForm: PlannerForm = {
+  goal: "weight_loss",
+  goalSelectionSource: "direct",
   age: "32",
   height: "170",
   weight: "78",
@@ -22,6 +21,7 @@ export const defaultForm: PlannerForm = {
   activity: "light",
   targetWeight: "70",
   pace: "0.5",
+  startingAdjustmentPreference: "standard",
   meals: "4",
   cookingTime: "30",
   dietStyle: "balanced",
@@ -33,6 +33,64 @@ export const defaultForm: PlannerForm = {
   sleep: "6to7",
   water: "medium",
   dislikes: "",
+  favourites: [],
+  hiddenFoods: [],
+  resistanceTraining: "none",
+  trainingDays: "0",
+  trainingExperience: "beginner",
+  trainingProgress: "unknown",
+  acknowledgesTrainingRequirement: false,
+  intentionalWeightChange: true,
+  unintentionalLossPercent: "0",
+  unintentionalLossMonths: "0",
+  negligibleIntakeDays: "0",
+  appetite: "normal",
+  digestiveTolerance: "good",
+  earlySatiety: false,
+  swallowingDifficulty: false,
+  severeDigestiveSymptoms: false,
+  pregnant: false,
+  breastfeeding: false,
+  eatingDisorderConcern: false,
+  seriousFoodAllergy: false,
+  medicalConditions: [],
+  cardiometabolic: {
+    bloodPressure: {
+      enabled: false,
+      systolic: "",
+      diastolic: "",
+      measuredAt: "",
+      measurementContext: "single_or_unknown",
+      deviceContext: "",
+      concerningSymptoms: false,
+      diagnosedHypertension: false,
+      stableUnderCare: false,
+    },
+    glycaemia: {
+      enabled: false,
+      measurementType: "fasting",
+      value: "",
+      unit: "mg_dl",
+      measuredAt: "",
+      sourceContext: "unknown",
+      diabetesHistory: false,
+      insulinOrHypoglycaemiaMedicine: false,
+      recurrentOrSevereHypoglycaemia: false,
+      crisisSymptoms: false,
+    },
+    lipids: {
+      enabled: false,
+      ldl: "",
+      hdl: "",
+      triglycerides: "",
+      unit: "mg_dl",
+      measuredAt: "",
+      fastingKnown: false,
+      diagnosedDyslipidaemia: false,
+      reviewedProfessionally: false,
+      knownAscvdOrClinicianDirectedDiet: false,
+    },
+  },
 };
 
 export const days = [
@@ -826,28 +884,46 @@ export const exchangeGroups = [
 
 export const sourceCards = [
   {
-    tag: "فرمول انرژی",
-    title: "Mifflin–St Jeor",
-    copy: "سوخت‌وساز استراحت از سن، قد، وزن و جنسیت برآورد می‌شود و سپس ضریب فعالیت اعمال می‌گردد.",
-    href: "https://pubmed.ncbi.nlm.nih.gov/2305711/",
+    tag: "برآورد انرژی",
+    title: "NASEM Dietary Reference Intakes for Energy",
+    copy: "معادلات جمعیتی ۲۰۲۳ برای برآورد نیاز انرژی بزرگسالان؛ همراه با نمایش عدم‌قطعیت و بازبینی با روند واقعی.",
+    href: "https://doi.org/10.17226/26818",
   },
   {
-    tag: "کیفیت الگو",
-    title: "راهنمای تغذیه سالم WHO",
-    copy: "حداقل ۴۰۰ گرم میوه و سبزی و دست‌کم ۲۵ گرم فیبر طبیعی در روز، پایه کیفیت برنامه است.",
-    href: "https://www.who.int/news-room/fact-sheets/detail/healthy-diet",
+    tag: "کاهش وزن",
+    title: "NICE Overweight and Obesity Management",
+    copy: "الگوی منعطف، متعادل و دارای کسری انرژی؛ رژیم‌های بسیار کم‌انرژی خارج از برنامه‌ریزی عادی و بدون پشتیبانی تخصصی هستند.",
+    href: "https://www.nice.org.uk/guidance/ng246",
   },
   {
-    tag: "ریتم کاهش",
-    title: "کاهش تدریجی CDC",
-    copy: "هدف‌گذاری آهسته و پیوسته، نسبت به کاهش سریع، احتمال حفظ نتیجه را بیشتر می‌کند.",
-    href: "https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html",
+    tag: "حجم عضله",
+    title: "ISSN Protein and Exercise Position Stand",
+    copy: "تمرین مقاومتی و دریافت کافی پروتئین مبنای حالت حجم‌اند؛ زمان‌بندی سخت‌گیرانه یا افزایش خالص عضله تضمین نمی‌شود.",
+    href: "https://pubmed.ncbi.nlm.nih.gov/28642676/",
   },
   {
-    tag: "پروتئین",
-    title: "مرور پژوهش‌های مدیریت وزن",
-    copy: "پروتئین بیشتر در محدوده منطقی می‌تواند به سیری و حفظ توده بدون چربی کمک کند.",
-    href: "https://pubmed.ncbi.nlm.nih.gov/25926512/",
+    tag: "افزایش وزن ایمن",
+    title: "NICE Nutrition Support",
+    copy: "کاهش وزن ناخواسته، دریافت ناچیز و خطر بازغذیه به ارزیابی حرفه‌ای نیاز دارند و با پذیرش یک هشدار قابل دورزدن نیستند.",
+    href: "https://www.nice.org.uk/guidance/cg32",
+  },
+  {
+    tag: "فشار خون",
+    title: "AHA/ACC High Blood Pressure Guideline",
+    copy: "اطلاعات فشار خون فقط برای مرز ایمنی استفاده می‌شود؛ یک اندازه‌گیری منفرد تشخیص نیست و وضعیت‌های بسیار بالا نیازمند ارزیابی‌اند.",
+    href: "https://professional.heart.org/en/science-news/2025-high-blood-pressure-guideline",
+  },
+  {
+    tag: "قند خون",
+    title: "ADA Standards of Care in Diabetes",
+    copy: "میزانه افت قند و داروهای دارای خطر هیپوگلیسمی را برای مرز ایمنی بررسی می‌کند، اما تشخیص، هدف درمانی یا تغییر دارو نمی‌سازد.",
+    href: "https://diabetesjournals.org/care/issue/49/Supplement_1",
+  },
+  {
+    tag: "چربی خون",
+    title: "ACC/AHA Dyslipidemia Guideline",
+    copy: "هدف LDL به خطر قلبی‌عروقی وابسته است؛ تری‌گلیسرید بسیار بالا به ارزیابی حرفه‌ای نیاز دارد و یک هدف ثابت برای همه نمایش داده نمی‌شود.",
+    href: "https://professional.heart.org/en/science-news/2026-guideline-on-the-management-of-dyslipidemia",
   },
 ];
 
