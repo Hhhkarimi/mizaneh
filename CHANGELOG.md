@@ -112,3 +112,35 @@ one field only.
   again in round 2 — see `CONTEXT.md` §9.1).
 - The client-only, no-backend architecture and its privacy guarantee
   (strengthened in wording, not weakened, by round 2's opt-in storage).
+
+## Specification review package — 2026-07-30
+
+- Recorded the approved guided-goal-selection direction with optional comparison cards.
+- Added the phase-3 multi-goal product specification.
+- Added explicit blood-pressure, glycaemia, and lipid safety requirements.
+- Added migration, editable-plan, progress-trend, privacy, security, accessibility, testing, and acceptance requirements.
+- No production code or production route was changed.
+
+## Phase 4 — approved multi-goal implementation — 2026-07-31
+
+- Implemented explicit weight-loss, muscle-gain and healthy-weight-gain modes.
+- Added guided goal selection, optional comparison and direct returning-user selection.
+- Added versioned NASEM 2023 EER calculation policies and uncertainty metadata for new plans while preserving legacy calculations for restored sessions.
+- Added non-bypassable safety exclusions and optional blood-pressure, glycaemia and lipid context.
+- Added full progressive plan editing, custom foods, custom recipes, recalculation, compatibility findings, locks, undo/redo and resets.
+- Added robust trend tracking and explicit, capped energy-adjustment proposals.
+- Added v2 multi-plan local workspace, versions, comparison and v1 migration.
+- Removed the temporary production prototype route, removed non-Vazirmatn font use, restored creator attribution and added security headers.
+- Added 59 static test declarations across goal, calculation, safety, editing, trend, storage and UI behavior.
+- Full lint/test/build remains an explicit release gate because dependencies could not be installed in the execution environment; see `docs/phase-4/verification-report.md`.
+
+## Phase 4.1 — health-screen usability correction — 2026-07-31
+
+- Replaced oversized health-card checkboxes with compact disclosure buttons using `aria-expanded` and `aria-pressed`.
+- Corrected the CSS selector that applied a 46px minimum height to native checkboxes.
+- Added a plain-language safety decision panel that separates the reason, explanation and concrete next step.
+- Added structured, versioned safety issues while preserving the legacy `reasons` export field.
+- Improved focus management: a blocked submission scrolls to and focuses the detailed safety explanation.
+- Added responsive two-column health fields, clearer labels, selected-state feedback and visible keyboard focus.
+- Changed the final action label when planning is blocked so users are not told that a plan will be generated.
+- Added regression tests for structured safety messages and health disclosure behavior.
