@@ -1,5 +1,15 @@
 # Changelog — Mizaneh production-readiness audit + fundamental upgrade
 
+
+## 2026-07-31 — Condition-adapted cardiometabolic planning and readability
+
+- Replaced the guided two-question goal recommendation with direct access to all three goals.
+- Stable hypertension, diabetes/prediabetes and dyslipidaemia no longer block plan generation; plans are adapted conservatively and carry a prominent clinician-review warning.
+- Kept hard stops for urgent warning symptoms, severe hypoglycaemia/crisis, triglycerides >=1000 mg/dL, refeeding risk and other out-of-scope medical nutrition therapy.
+- Added carbohydrates, total fat, saturated fat, sodium, added sugar and potassium to catalogue estimates, daily/weekly totals, editing and exports.
+- Added explicit `estimated` and `user_entered` provenance so incomplete recipe data are not presented as verified clinical values.
+- Increased foreground/background contrast and redesigned direct goal cards and clinical-plan explanations for desktop and mobile readability.
+
 Cumulative changes against `BASE_COMMIT` `4a2d747d027ce3e85413a12488009d686e6187b1`
 (the original, untouched repository), covering both work rounds. No
 formula constant, meal-catalogue nutrition value, or existing validation

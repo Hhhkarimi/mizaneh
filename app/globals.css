@@ -8,6 +8,7 @@
   --lime: #b8db78;
   --lime-soft: #eaf4d7;
   --coral: #ff715b;
+  --coral-text: #a92f22;
   --coral-soft: #ffe6df;
   --blue-soft: #dceceb;
   --shadow: 0 24px 70px rgba(16, 44, 42, 0.11);
@@ -174,7 +175,7 @@
 }
 
 .substitute-picker li button:hover {
-  border-color: var(--coral);
+  border-color: var(--coral-text);
 }
 
 .substitute-picker li button:focus-visible {
@@ -362,7 +363,7 @@ p {
 .header-action:hover,
 .primary-cta:hover {
   background: var(--coral);
-  border-color: var(--coral);
+  border-color: var(--coral-text);
   color: var(--ink);
   transform: translateY(-2px);
 }
@@ -402,7 +403,7 @@ p {
 .eyebrow,
 .section-kicker {
   align-items: center;
-  color: var(--coral);
+  color: var(--coral-text);
   display: flex;
   font-size: 0.76rem;
   font-variation-settings: "wght" 800;
@@ -426,7 +427,7 @@ p {
 }
 
 .hero h1 em {
-  color: var(--coral);
+  color: var(--coral-text);
   font-style: normal;
   position: relative;
 }
@@ -554,7 +555,7 @@ p {
 }
 
 .step-label {
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 0.72rem;
   font-variation-settings: "wght" 800;
 }
@@ -835,7 +836,7 @@ legend {
 
 .check-chip input:checked + span {
   background: var(--coral-soft);
-  border-color: var(--coral);
+  border-color: var(--coral-text);
 }
 
 .check-chip input:focus-visible + span {
@@ -1027,7 +1028,7 @@ legend {
 }
 
 .block-heading p {
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 0.72rem;
   font-variation-settings: "wght" 800;
   margin-bottom: 3px;
@@ -1166,7 +1167,7 @@ legend {
 }
 
 .quality-targets > div > span {
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 1.2rem;
   grid-row: 1 / 3;
   margin-inline-end: 10px;
@@ -1730,7 +1731,7 @@ legend {
 }
 
 .method-flow article > span {
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 2.8rem;
   font-variation-settings: "wght" 200;
 }
@@ -1741,7 +1742,7 @@ legend {
 }
 
 .method-flow strong {
-  color: #56802b;
+  color: #365f16;
   display: block;
   font-size: 0.72rem;
   min-height: 45px;
@@ -1775,7 +1776,7 @@ legend {
 }
 
 .source-grid span {
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 0.62rem;
   font-variation-settings: "wght" 800;
 }
@@ -2594,7 +2595,7 @@ footer p {
 .measurement-list { display: grid; gap: 8px; margin-top: 14px; }
 .measurement-list article { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
 .measurement-list article small { color: var(--muted); flex: 1 1 200px; }
-.measurement-list article button { border: 0; background: transparent; color: var(--coral); cursor: pointer; }
+.measurement-list article button { border: 0; background: transparent; color: var(--coral-text); cursor: pointer; }
 .trend-result,
 .adjustment-proposal { margin-top: 14px; border-radius: var(--radius-md); padding: 14px 16px; }
 .trend-result { background: var(--blue-soft); display: grid; }
@@ -2833,7 +2834,7 @@ footer p {
   padding: 12px 2px;
 }
 
-.safety-details-group > summary::marker { color: var(--coral); }
+.safety-details-group > summary::marker { color: var(--coral-text); }
 .safety-details-group > summary span { font-size: .8rem; }
 .safety-details-group > summary small { color: var(--muted); font-size: .66rem; font-variation-settings: "wght" 500; }
 .safety-details-group[open] > summary { margin-bottom: 10px; }
@@ -3057,4 +3058,264 @@ footer p {
   .version-comparison > p {
     grid-column: auto;
   }
+}
+
+/* Readability and direct-goal selection revision. */
+:root {
+  --ink-2: #173a36;
+  --muted: #405b57;
+  --line: rgba(16, 44, 42, 0.24);
+}
+
+.goal-selection__intro {
+  color: var(--ink-2);
+  font-size: .82rem;
+  line-height: 1.85;
+  margin: 8px 0 0;
+  max-width: 760px;
+}
+
+.goal-choice-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.goal-choice-card {
+  align-content: start;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 9px;
+  min-height: 230px;
+  padding: 18px;
+  position: relative;
+  text-align: start;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.goal-choice-card:hover {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+}
+
+.goal-choice-card:focus-visible {
+  outline: 4px solid var(--coral);
+  outline-offset: 3px;
+}
+
+.goal-choice-card.is-selected {
+  background: var(--lime-soft);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(16, 44, 42, .08);
+}
+
+.goal-choice-card__check {
+  align-items: center;
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  display: inline-flex;
+  font-variation-settings: "wght" 850;
+  height: 26px;
+  justify-content: center;
+  position: absolute;
+  inset-inline-end: 14px;
+  top: 14px;
+  width: 26px;
+}
+
+.goal-choice-card.is-selected .goal-choice-card__check {
+  background: var(--ink);
+  color: white;
+}
+
+.goal-choice-card__badge {
+  color: var(--ink-2);
+  font-size: .7rem;
+  line-height: 1.55;
+  padding-inline-end: 34px;
+}
+
+.goal-choice-card > strong {
+  font-size: 1.06rem;
+}
+
+.goal-choice-card > p {
+  color: var(--ink-2);
+  font-size: .78rem;
+  line-height: 1.8;
+  margin: 0;
+}
+
+.goal-choice-card > small {
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.7;
+}
+
+.goal-choice-card__action {
+  align-self: end;
+  border-top: 1px solid var(--line);
+  font-size: .72rem;
+  font-variation-settings: "wght" 750;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.clinical-plan-banner {
+  background: #fff8df;
+  border: 2px solid #b88d1b;
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  margin: 18px 0 26px;
+  padding: 20px;
+}
+
+.clinical-plan-banner__heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.clinical-plan-banner__heading > span {
+  align-items: center;
+  background: var(--ink);
+  border-radius: 50%;
+  color: white;
+  display: inline-flex;
+  flex: 0 0 30px;
+  font-variation-settings: "wght" 850;
+  height: 30px;
+  justify-content: center;
+}
+
+.clinical-plan-banner__heading p {
+  color: var(--ink-2);
+  font-size: .72rem;
+  margin: 0 0 3px;
+}
+
+.clinical-plan-banner__heading h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.clinical-plan-banner > p,
+.clinical-plan-banner li {
+  color: var(--ink-2);
+  font-size: .78rem;
+  line-height: 1.85;
+}
+
+.clinical-plan-banner__columns {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 15px;
+}
+
+.clinical-plan-banner__columns > div {
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(16, 44, 42, .18);
+  border-radius: 14px;
+  padding: 13px;
+}
+
+.clinical-plan-banner__columns strong {
+  font-size: .78rem;
+}
+
+.clinical-plan-banner__columns ul {
+  margin: 8px 0 0;
+  padding-inline-start: 20px;
+}
+
+.clinical-plan-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.clinical-plan-targets span {
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: .7rem;
+  line-height: 1.55;
+  padding: 7px 10px;
+}
+
+.submit-safety-hint--clinical {
+  background: var(--blue-soft);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.weekly-nutrition-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.weekly-nutrition-summary > div,
+.meal-nutrient-chips span {
+  color: var(--ink);
+}
+
+.weekly-nutrition-summary > p {
+  color: var(--ink-2);
+  grid-column: 1 / -1;
+  line-height: 1.75;
+}
+
+.meal-nutrient-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0 13px;
+}
+
+.meal-nutrient-chips span {
+  background: var(--blue-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: .68rem;
+  padding: 5px 8px;
+}
+
+.meal-nutrient-chips b {
+  font-variation-settings: "wght" 800;
+}
+
+.safety-screen__intro,
+.health-details__intro,
+.health-context-toggle__copy small,
+.safety-issue > p,
+.safety-issue__next-step p,
+.safety-notices ul,
+.form-note,
+.submit-safety-hint {
+  color: var(--ink-2);
+}
+
+.health-context-toggle__copy small,
+.safety-details-group > summary small,
+.safety-notices summary {
+  font-size: .72rem;
+}
+
+@media (max-width: 920px) {
+  .goal-choice-grid { grid-template-columns: 1fr; }
+  .goal-choice-card { min-height: 0; }
+  .clinical-plan-banner__columns { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 680px) {
+  .weekly-nutrition-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .clinical-plan-banner { padding: 16px; }
 }

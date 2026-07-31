@@ -19,7 +19,7 @@ describe("safety screening", () => {
 
   it("returns structured plain-language issues with a next step", () => {
     const result = screenSafety(form({ pregnant: true }));
-    expect(result.policyId).toBe("safety.screen.v2");
+    expect(result.policyId).toBe("safety.screen.v3");
     expect(result.issues[0]).toEqual(expect.objectContaining({
       category: "scope",
       title: expect.stringContaining("بارداری"),
@@ -49,7 +49,7 @@ describe("safety screening", () => {
     expect(result.disposition).toBe("urgent_or_high_priority_assessment");
   });
 
-  it("treats BP over 180/120 as blocking and symptoms as urgent", () => {
+  it("keeps a symptom-free BP over 180/120 in warning mode and treats symptoms as urgent", () => {
     const severe = structuredClone(defaultForm);
     severe.cardiometabolic.bloodPressure = {
       ...severe.cardiometabolic.bloodPressure,
@@ -58,8 +58,10 @@ describe("safety screening", () => {
       diastolic: "90",
     };
     expect(screenSafety(severe).disposition).toBe("professional_review_required");
+    expect(screenSafety(severe).blocked).toBe(false);
     severe.cardiometabolic.bloodPressure.concerningSymptoms = true;
     expect(screenSafety(severe).disposition).toBe("urgent_or_high_priority_assessment");
+    expect(screenSafety(severe).blocked).toBe(true);
   });
 
   it("treats chest, breathing or neurological warning symptoms as urgent regardless of the pressure number", () => {
@@ -83,8 +85,10 @@ describe("safety screening", () => {
       unit: "mg_dl",
     };
     expect(screenSafety(low).disposition).toBe("professional_review_required");
+    expect(screenSafety(low).blocked).toBe(false);
     low.cardiometabolic.glycaemia.value = "50";
     expect(screenSafety(low).disposition).toBe("urgent_or_high_priority_assessment");
+    expect(screenSafety(low).blocked).toBe(true);
   });
 
   it("does not treat an A1C percentage as a low glucose reading", () => {
@@ -136,7 +140,50 @@ describe("safety screening", () => {
       triglycerides: "500",
     };
     expect(screenSafety(lipid).disposition).toBe("professional_review_required");
+    expect(screenSafety(lipid).blocked).toBe(false);
     lipid.cardiometabolic.lipids.triglycerides = "1000";
     expect(screenSafety(lipid).disposition).toBe("urgent_or_high_priority_assessment");
+    expect(screenSafety(lipid).blocked).toBe(true);
   });
+
+  it("does not block stable hypertension, diabetes or dyslipidaemia", () => {
+    const clinical = structuredClone(defaultForm);
+    clinical.cardiometabolic.bloodPressure = {
+      ...clinical.cardiometabolic.bloodPressure,
+      enabled: true,
+      diagnosedHypertension: true,
+      stableUnderCare: true,
+      systolic: "145",
+      diastolic: "90",
+    };
+    clinical.cardiometabolic.glycaemia = {
+      ...clinical.cardiometabolic.glycaemia,
+      enabled: true,
+      diabetesHistory: true,
+      measurementType: "a1c",
+      unit: "percent",
+      value: "7.2",
+    };
+    clinical.cardiometabolic.lipids = {
+      ...clinical.cardiometabolic.lipids,
+      enabled: true,
+      diagnosedDyslipidaemia: true,
+      reviewedProfessionally: true,
+      ldl: "135",
+      triglycerides: "220",
+    };
+    const result = screenSafety(clinical);
+    expect(result.blocked).toBe(false);
+    expect(["general_support_only", "professional_review_required"]).toContain(result.disposition);
+  });
+
+  it("allows diabetes and serious cardiovascular history with a prominent professional-review warning", () => {
+    const result = screenSafety(form({
+      medicalConditions: ["uncontrolled_diabetes", "serious_cardiovascular_disease"],
+    }));
+    expect(result.disposition).toBe("professional_review_required");
+    expect(result.blocked).toBe(false);
+    expect(result.issues.some((issue) => issue.id === "scope-adapted-medical-condition")).toBe(true);
+  });
+
 });

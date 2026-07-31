@@ -38,4 +38,21 @@ describe("SafetyScreenFields", () => {
       }),
     }));
   });
+
+  it("explains that stable diabetes, hypertension and dyslipidaemia can receive an adapted plan", () => {
+    const clinical = structuredClone(defaultForm);
+    clinical.cardiometabolic.glycaemia = {
+      ...clinical.cardiometabolic.glycaemia,
+      enabled: true,
+      diabetesHistory: true,
+      measurementType: "a1c",
+      unit: "percent",
+      value: "7",
+    };
+    render(<SafetyScreenFields form={clinical} result={screenSafety(clinical)} onChange={vi.fn()} />);
+    expect(screen.getByText("برنامه قابل ساخت است، اما نقش درمانی ندارد")).toBeInTheDocument();
+    expect(screen.getByText(/دارو/)).toBeInTheDocument();
+    expect(screen.queryByText("فعلاً برنامهٔ خودکار ساخته نمی‌شود")).not.toBeInTheDocument();
+  });
+
 });

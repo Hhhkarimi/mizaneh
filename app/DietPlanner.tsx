@@ -55,6 +55,7 @@ import { MealEditor } from "@/components/meal-editor/MealEditor";
 import { ProgressTracker } from "@/components/progress/ProgressTracker";
 import { clearSession, saveSession, type StoredSession } from "@/lib/storage/session";
 import { clearWorkspace, saveWorkspace, type StoredWorkspace } from "@/lib/storage/workspace";
+import { getClinicalNutritionProfile } from "@/lib/clinical/diet-profile";
 
 function BrandMark({ className = "" }: { className?: string }) {
   return (
@@ -115,6 +116,7 @@ export default function DietPlanner() {
 
   const previewMetrics = useMemo(() => calculateCurrentMetrics(form), [form]);
   const safetyResult = useMemo(() => screenSafety(form), [form]);
+  const previewClinicalProfile = useMemo(() => getClinicalNutritionProfile(form, previewMetrics.targetCalories), [form, previewMetrics.targetCalories]);
   const activeForm = submittedForm ?? form;
   const generatedPlan = useMemo(
     () => metrics ? ensurePlanIdentity(buildWeeklyPlan(activeForm, metrics, planMode, variationSeed)) : [],
@@ -127,6 +129,7 @@ export default function DietPlanner() {
   );
   const selectedDay = displayedPlan[activeDay];
   const planSummary = useMemo(() => summarizePlan(displayedPlan), [displayedPlan]);
+  const clinicalProfile = useMemo(() => getClinicalNutritionProfile(activeForm, metrics?.targetCalories ?? previewMetrics.targetCalories), [activeForm, metrics?.targetCalories, previewMetrics.targetCalories]);
   const compatibilityIssues = useMemo(
     () => evaluatePlanCompatibility(displayedPlan, activeForm),
     [displayedPlan, activeForm],
@@ -496,10 +499,12 @@ export default function DietPlanner() {
       `بازهٔ عدم‌قطعیت نگهدارنده: ±${formatNumber(metrics.uncertaintyKcal)} کیلوکالری`,
       `پروتئین: ${formatNumber(metrics.proteinMin)} تا ${formatNumber(metrics.proteinMax)} گرم`,
       `سیاست محاسبه: ${metrics.policy.calculationPolicyId}`,
+      clinicalProfile.active ? `ملاحظات سلامت: ${clinicalProfile.focuses.join("، ")}` : "ملاحظات سلامت: برنامهٔ عمومی",
+      clinicalProfile.active ? "هشدار: این برنامه باید با پزشک یا متخصص تغذیهٔ درمانی بازبینی شود و جایگزین تنظیم دارو نیست." : "",
       "",
       ...displayedPlan.flatMap((day) => [
-        day.label,
-        ...day.meals.map((meal) => `${meal.displaySlot}${meal.mealTime ? ` (${meal.mealTime})` : ""}: ${meal.title} — ${meal.serving}`),
+        `${day.label} — ${formatNumber(day.calories)} کیلوکالری، ${formatNumber(day.protein)} گرم پروتئین، ${typeof day.carbs === "number" ? `${formatNumber(day.carbs)} گرم کربوهیدرات` : "کربوهیدرات نامشخص"}، ${typeof day.fat === "number" ? `${formatNumber(day.fat)} گرم چربی` : "چربی نامشخص"}، ${formatNumber(day.fiber)} گرم فیبر، ${typeof day.saturatedFat === "number" ? `${formatNumber(day.saturatedFat)} گرم چربی اشباع` : "چربی اشباع نامشخص"}، ${typeof day.sodiumMg === "number" ? `${formatNumber(day.sodiumMg)} میلی‌گرم سدیم` : "سدیم نامشخص"}، ${typeof day.addedSugar === "number" ? `${formatNumber(day.addedSugar)} گرم قند افزوده` : "قند افزوده نامشخص"}، ${typeof day.potassiumMg === "number" ? `${formatNumber(day.potassiumMg)} میلی‌گرم پتاسیم` : "پتاسیم نامشخص"}`,
+        ...day.meals.map((meal) => `${meal.displaySlot}${meal.mealTime ? ` (${meal.mealTime})` : ""}: ${meal.title} — ${meal.serving} | ${formatNumber(meal.targetCalories)} kcal، پروتئین ${formatNumber(meal.targetProtein)}g، کربوهیدرات ${typeof meal.targetCarbs === "number" ? formatNumber(meal.targetCarbs) : "—"}g، چربی ${typeof meal.targetFat === "number" ? formatNumber(meal.targetFat) : "—"}g، فیبر ${formatNumber(meal.targetFiber)}g، چربی اشباع ${typeof meal.targetSaturatedFat === "number" ? formatNumber(meal.targetSaturatedFat) : "—"}g، سدیم ${typeof meal.targetSodiumMg === "number" ? formatNumber(meal.targetSodiumMg) : "—"}mg، قند افزوده ${typeof meal.targetAddedSugar === "number" ? formatNumber(meal.targetAddedSugar) : "—"}g، پتاسیم ${typeof meal.targetPotassiumMg === "number" ? formatNumber(meal.targetPotassiumMg) : "—"}mg`),
         "",
       ]),
     ];
@@ -742,7 +747,6 @@ export default function DietPlanner() {
                 <GoalSelection
                   form={form}
                   onGoalChange={requestGoalChange}
-                  onResistanceTrainingChange={(status) => updateForm("resistanceTraining", status)}
                 />
 
                 <div className="field-grid field-grid--three">
@@ -1148,7 +1152,12 @@ export default function DietPlanner() {
 
           {step === 4 && safetyResult.blocked && (
             <p className="submit-safety-hint">
-              ساخت برنامه فعلاً متوقف است. دکمهٔ زیر شما را به توضیح دلیل و اقدام بعدی در بخش بررسی ایمنی می‌برد؛ پاسخ‌هایتان پاک نمی‌شوند.
+              ساخت برنامه فقط به‌دلیل یک وضعیت خارج از دامنه یا علامت پرخطر متوقف است. دلیل دقیق و اقدام بعدی در بخش بررسی ایمنی نمایش داده می‌شود؛ پاسخ‌هایتان پاک نمی‌شوند.
+            </p>
+          )}
+          {step === 4 && !safetyResult.blocked && previewClinicalProfile.active && (
+            <p className="submit-safety-hint submit-safety-hint--clinical">
+              برنامه ساخته می‌شود و غذاها با ملاحظات فشار خون، قند خون یا چربی خون اولویت‌بندی می‌شوند. این برنامه را برای بازبینی به پزشک یا متخصص تغذیه نشان دهید و دارو را تغییر ندهید.
             </p>
           )}
 
@@ -1173,9 +1182,11 @@ export default function DietPlanner() {
               {step === 4
                 ? safetyResult.blocked
                   ? "دیدن دلیل توقف برنامه"
-                  : safetyResult.disposition === "general_support_only"
-                    ? "ساخت برنامهٔ عمومی"
-                    : "ساخت برنامه هفتگی"
+                  : safetyResult.disposition === "professional_review_required"
+                    ? "ساخت برنامه با هشدار پزشکی"
+                    : safetyResult.disposition === "general_support_only"
+                      ? "ساخت برنامهٔ حمایتی"
+                      : "ساخت برنامه هفتگی"
                 : "ادامه"}
               <span aria-hidden="true">←</span>
             </button>
@@ -1225,6 +1236,28 @@ export default function DietPlanner() {
               {archivedPlans.length > 0 && <div className="archived-plans"><span>نسخه‌های حفظ‌شده</span>{archivedPlans.map((plan) => <div className="archived-plan-row" key={plan.id}><button type="button" onClick={() => openArchivedPlan(plan)}>بازکردن {plan.name}</button><button type="button" aria-pressed={comparisonPlanId === plan.id} onClick={() => setComparisonPlanId((current) => current === plan.id ? null : plan.id)}>مقایسه</button></div>)}</div>}
               {comparisonPlan && comparisonSummary && <section className="version-comparison" aria-label="مقایسهٔ نسخه‌های برنامه"><div><span>نسخهٔ فعال</span><strong>{goalCopy[submittedForm.goal].title}</strong><small>{formatNumber(metrics.targetCalories)} کیلوکالری هدف روزانه</small><small>{formatNumber(planSummary.averageCalories)} میانگین برنامه</small></div><div><span>{comparisonPlan.name}</span><strong>{goalCopy[comparisonPlan.goal].title}</strong><small>{formatNumber(comparisonPlan.calculation.targetCalories)} کیلوکالری هدف روزانه</small><small>{formatNumber(comparisonSummary.averageCalories)} میانگین برنامه</small></div><p>تفاوت هدف انرژی: {formatNumber(comparisonPlan.calculation.targetCalories - metrics.targetCalories)} کیلوکالری. این مقایسه فقط تفاوت نسخه‌ها را نشان می‌دهد و نسخه‌ای را خودکار جایگزین نمی‌کند.</p></section>}
             </section>
+
+            {clinicalProfile.active && (
+              <section className="clinical-plan-banner" aria-labelledby="clinical-plan-title">
+                <div className="clinical-plan-banner__heading">
+                  <span aria-hidden="true">!</span>
+                  <div>
+                    <p>برنامهٔ سازگارشده با وضعیت سلامت</p>
+                    <h3 id="clinical-plan-title">{clinicalProfile.title}</h3>
+                  </div>
+                </div>
+                <p>{clinicalProfile.summary}</p>
+                <div className="clinical-plan-banner__columns">
+                  <div><strong>تغییراتی که در پیشنهاد غذا اعمال شده</strong><ul>{clinicalProfile.adaptations.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                  <div><strong>هشدار مهم</strong><ul>{clinicalProfile.cautions.map((item) => <li key={item}>{item}</li>)}<li>پیش از اجرای برنامه، آن را با پزشک یا متخصص تغذیهٔ درمانی مرور کنید.</li></ul></div>
+                </div>
+                <div className="clinical-plan-targets" aria-label="هدف‌های تغذیه‌ای حمایتی">
+                  {clinicalProfile.sodiumTargetMg && <span>سدیم برنامه: هدف حمایتی کمتر از حدود {formatNumber(clinicalProfile.sodiumTargetMg)} میلی‌گرم در روز</span>}
+                  {clinicalProfile.saturatedFatTargetG && <span>چربی اشباع: هدف حمایتی حدود {formatNumber(clinicalProfile.saturatedFatTargetG)} گرم یا کمتر در روز</span>}
+                  {clinicalProfile.consistentCarbohydratePattern && <span>کربوهیدرات: توزیع یکنواخت‌تر در وعده‌ها، بدون تعیین یک درصد ثابت برای همه</span>}
+                </div>
+              </section>
+            )}
 
             <article className="result-block numbers-block">
               <div className="block-heading">
@@ -1382,10 +1415,15 @@ export default function DietPlanner() {
 
               <div className="weekly-nutrition-summary" aria-label="خلاصهٔ تغذیه‌ای برنامه">
                 <div><span>میانگین انرژی روزانه</span><strong>{formatNumber(planSummary.averageCalories)} کیلوکالری</strong></div>
-                <div><span>انرژی کل برنامه</span><strong>{formatNumber(planSummary.weeklyCalories)} کیلوکالری</strong></div>
                 <div><span>میانگین پروتئین</span><strong>{formatNumber(planSummary.averageProtein)} گرم</strong></div>
+                <div><span>میانگین کربوهیدرات</span><strong>{typeof planSummary.averageCarbs === "number" ? `${formatNumber(planSummary.averageCarbs)} گرم` : "نامشخص"}</strong></div>
+                <div><span>میانگین چربی</span><strong>{typeof planSummary.averageFat === "number" ? `${formatNumber(planSummary.averageFat)} گرم` : "نامشخص"}</strong></div>
                 <div><span>میانگین فیبر</span><strong>{formatNumber(planSummary.averageFiber)} گرم</strong></div>
-                <p>{planSummary.nutritionCompleteness === "complete" ? "داده‌های تغذیه‌ای کامل‌اند." : planSummary.nutritionCompleteness === "user_entered" ? "خلاصه شامل داده‌های واردشده توسط کاربر است." : "اطلاعات تغذیه‌ای برخی غذاها ناقص است."}</p>
+                <div><span>چربی اشباع</span><strong>{typeof planSummary.averageSaturatedFat === "number" ? `${formatNumber(planSummary.averageSaturatedFat)} گرم` : "نامشخص"}</strong></div>
+                <div><span>سدیم</span><strong>{typeof planSummary.averageSodiumMg === "number" ? `${formatNumber(planSummary.averageSodiumMg)} میلی‌گرم` : "نامشخص"}</strong></div>
+                <div><span>قند افزوده</span><strong>{typeof planSummary.averageAddedSugar === "number" ? `${formatNumber(planSummary.averageAddedSugar)} گرم` : "نامشخص"}</strong></div>
+                <div><span>پتاسیم</span><strong>{typeof planSummary.averagePotassiumMg === "number" ? `${formatNumber(planSummary.averagePotassiumMg)} میلی‌گرم` : "نامشخص"}</strong></div>
+                <p>{planSummary.nutritionCompleteness === "complete" ? "داده‌های تغذیه‌ای کامل‌اند." : planSummary.nutritionCompleteness === "estimated" ? "مقادیر کاتالوگ برآوردی‌اند؛ برند، نمک، روغن و روش پخت می‌تواند نتیجهٔ واقعی را تغییر دهد." : planSummary.nutritionCompleteness === "user_entered" ? "خلاصه شامل داده‌های واردشده توسط کاربر است." : "اطلاعات تغذیه‌ای برخی غذاها ناقص است."}</p>
               </div>
 
               <div className="weekly-table-wrap">
@@ -1448,7 +1486,11 @@ export default function DietPlanner() {
                       </h4>
                     </div>
                     <span>{formatNumber(selectedDay.protein)} گرم پروتئین</span>
+                    {typeof selectedDay.carbs === "number" && <span>{formatNumber(selectedDay.carbs)} گرم کربوهیدرات</span>}
+                    {typeof selectedDay.fat === "number" && <span>{formatNumber(selectedDay.fat)} گرم چربی</span>}
                     <span>{formatNumber(selectedDay.fiber)} گرم فیبر</span>
+                    {typeof selectedDay.sodiumMg === "number" && <span>{formatNumber(selectedDay.sodiumMg)} میلی‌گرم سدیم</span>}
+                    {typeof selectedDay.potassiumMg === "number" && <span>{formatNumber(selectedDay.potassiumMg)} میلی‌گرم پتاسیم</span>}
                   </div>
                   <div className="meal-detail-list">
                     {selectedDay.meals.map((meal, index) => {
@@ -1473,6 +1515,12 @@ export default function DietPlanner() {
                               <dt>پروتئین</dt>
                               <dd>{formatNumber(meal.targetProtein)} گرم</dd>
                             </div>
+                            {typeof meal.targetCarbs === "number" && <div><dt>کربوهیدرات</dt><dd>{formatNumber(meal.targetCarbs)} گرم</dd></div>}
+                            {typeof meal.targetFat === "number" && <div><dt>چربی</dt><dd>{formatNumber(meal.targetFat)} گرم</dd></div>}
+                            <div><dt>فیبر</dt><dd>{formatNumber(meal.targetFiber)} گرم</dd></div>
+                            {typeof meal.targetSaturatedFat === "number" && <div><dt>چربی اشباع</dt><dd>{formatDecimal(meal.targetSaturatedFat)} گرم</dd></div>}
+                            {typeof meal.targetSodiumMg === "number" && <div><dt>سدیم</dt><dd>{formatNumber(meal.targetSodiumMg)} میلی‌گرم</dd></div>}
+                            {typeof meal.targetAddedSugar === "number" && <div><dt>قند افزوده</dt><dd>{formatDecimal(meal.targetAddedSugar)} گرم</dd></div>}
                             <div>
                               <dt>زمان</dt>
                               <dd>{formatNumber(meal.prep)} دقیقه</dd>

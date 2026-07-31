@@ -36,7 +36,7 @@ function triglyceridesToMgDl(value: number, unit: "mg_dl" | "mmol_l") {
   return value;
 }
 
-type IssueInput = Omit<SafetyIssue, "severity">;
+type IssueInput = Omit<SafetyIssue, "severity" | "blocksPlanning">;
 
 export function screenSafety(form: PlannerForm): SafetyScreenResult {
   let disposition: SafetyDisposition = "ordinary_scope";
@@ -47,11 +47,12 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
   const add = (
     next: Exclude<SafetyDisposition, "ordinary_scope">,
     issue: IssueInput,
+    blocksPlanning = false,
   ) => {
     if (priority[next] > priority[disposition]) disposition = next;
     if (seenIssueIds.has(issue.id)) return;
     seenIssueIds.add(issue.id);
-    issues.push({ ...issue, severity: next });
+    issues.push({ ...issue, severity: next, blocksPlanning });
   };
 
   const age = toNumber(form.age);
@@ -66,7 +67,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "این نسخه برای افراد زیر ۱۸ سال طراحی نشده است",
       explanation: "نیاز انرژی و رشد در کودکان و نوجوانان با بزرگسالان متفاوت است و برنامهٔ عمومی بزرگسالان می‌تواند مناسب نباشد.",
       nextStep: "برای برنامهٔ متناسب با سن و رشد، از پزشک یا متخصص تغذیهٔ واجد صلاحیت کمک بگیرید.",
-    });
+    }, true);
   }
 
   if (form.pregnant || form.breastfeeding) {
@@ -76,7 +77,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "بارداری یا شیردهی به برنامهٔ اختصاصی نیاز دارد",
       explanation: "در این دوره‌ها نیاز انرژی، پروتئین و ریزمغذی‌ها تغییر می‌کند و برنامهٔ عمومی میزانه برای آن طراحی نشده است.",
       nextStep: "پیش از تغییر هدف وزن یا دریافت انرژی، با پزشک یا متخصص تغذیهٔ آشنا با بارداری و شیردهی مشورت کنید.",
-    });
+    }, true);
   }
 
   if (form.eatingDisorderConcern) {
@@ -86,7 +87,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "نگرانی دربارهٔ اختلال خوردن نیازمند حمایت انسانی است",
       explanation: "محاسبهٔ کالری یا تغییر وزن ممکن است علائم را تشدید کند و ابزار خودکار نمی‌تواند ایمنی روانی و پزشکی را ارزیابی کند.",
       nextStep: "با پزشک، روان‌شناس یا متخصص تغذیهٔ آشنا با اختلالات خوردن تماس بگیرید. این محدودیت با پذیرش یک هشدار قابل دورزدن نیست.",
-    });
+    }, true);
   }
 
   if (form.seriousFoodAllergy) {
@@ -96,20 +97,36 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "حساسیت غذایی جدی به کنترل تخصصی آلرژن نیاز دارد",
       explanation: "میزانه می‌تواند مواد ثبت‌شده را فیلتر کند، اما تماس متقاطع، برچسب محصول و ایمنی آماده‌سازی را تضمین نمی‌کند.",
       nextStep: "برنامه را با متخصص تغذیه یا تیم درمانی خود هماهنگ کنید و دستور اقدام اضطراری حساسیت را در دسترس نگه دارید.",
+    }, true);
+  }
+
+  const conditionAdaptable: MedicalCondition[] = form.medicalConditions.filter((condition) =>
+    condition === "uncontrolled_diabetes" || condition === "serious_cardiovascular_disease",
+  );
+  const conditionBlocking = form.medicalConditions.filter((condition) =>
+    !conditionAdaptable.includes(condition),
+  );
+
+  if (conditionAdaptable.length > 0) {
+    const selected = conditionAdaptable.map((condition) => medicalConditionLabels[condition]).join("، ");
+    add("professional_review_required", {
+      id: "scope-adapted-medical-condition",
+      category: "medical_condition",
+      title: "برنامه با محدودیت و هشدار پزشکی ساخته می‌شود",
+      explanation: `موارد انتخاب‌شده: ${selected}. میزانه الگوی غذا را محافظه‌کارانه‌تر می‌کند، اما نمی‌تواند دارو، هدف درمانی یا محدودیت‌های آزمایشگاهی را تعیین کند.`,
+      nextStep: "برنامه را برای بازبینی به پزشک یا متخصص تغذیهٔ درمانی نشان دهید و دارو یا مقدار کربوهیدرات را خودسرانه تغییر ندهید.",
     });
   }
 
-  if (form.medicalConditions.length > 0) {
-    const selected = form.medicalConditions
-      .map((condition) => medicalConditionLabels[condition])
-      .join("، ");
+  if (conditionBlocking.length > 0) {
+    const selected = conditionBlocking.map((condition) => medicalConditionLabels[condition]).join("، ");
     add("professional_review_required", {
       id: "scope-medical-condition",
       category: "medical_condition",
-      title: "شرایط ثبت‌شده به تغذیه‌درمانی یا هماهنگی حرفه‌ای نیاز دارد",
-      explanation: `موارد انتخاب‌شده: ${selected}. برنامهٔ عمومی نمی‌تواند محدودیت‌های آزمایشگاهی، دارویی یا درمانی این شرایط را به‌طور ایمن تنظیم کند.`,
-      nextStep: "پیش از ساخت برنامه، هدف و محدودیت‌های غذایی را با پزشک یا متخصص تغذیهٔ درمانی خود مشخص کنید.",
-    });
+      title: "این شرایط به تغذیه‌درمانی اختصاصی نیاز دارد",
+      explanation: `موارد انتخاب‌شده: ${selected}. بدون مرحلهٔ بیماری، آزمایش‌ها و محدودیت‌های درمانی، برنامهٔ خودکار می‌تواند نامناسب باشد.`,
+      nextStep: "ابتدا محدودیت‌های دقیق غذا، مایعات، الکترولیت‌ها یا بافت غذا را از تیم درمانی دریافت کنید.",
+    }, true);
   }
 
   if (form.swallowingDifficulty) {
@@ -119,7 +136,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "دشواری بلع یا جویدن به ارزیابی تخصصی نیاز دارد",
       explanation: "بافت، غلظت و ایمنی غذا باید متناسب با علت مشکل تعیین شود و برنامهٔ معمول ممکن است خطر خفگی یا دریافت ناکافی ایجاد کند.",
       nextStep: "برای ارزیابی بلع و تعیین بافت مناسب غذا از پزشک، گفتاردرمانگر یا متخصص تغذیه کمک بگیرید.",
-    });
+    }, true);
   }
 
   if (form.severeDigestiveSymptoms) {
@@ -129,7 +146,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "علائم شدید گوارشی باید پیش از برنامه بررسی شود",
       explanation: "درد شدید، استفراغ مداوم، اسهال شدید یا احتمال سوءجذب می‌تواند بر جذب و ایمنی افزایش یا کاهش دریافت اثر بگذارد.",
       nextStep: "ابتدا علت علائم را با پزشک یا متخصص تغذیهٔ درمانی بررسی کنید و سپس برنامه را با توصیهٔ حرفه‌ای هماهنگ کنید.",
-    });
+    }, true);
   }
 
   if (Number.isFinite(bmi) && bmi < 16) {
@@ -139,7 +156,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
       title: "کم‌وزنی شدید و خطر شروع نامناسب تغذیه گزارش شده است",
       explanation: "در BMI کمتر از ۱۶، افزایش سریع دریافت بدون ارزیابی و پایش می‌تواند خطر بازغذیه و اختلالات الکترولیتی داشته باشد.",
       nextStep: "پیش از هر برنامهٔ افزایش یا کاهش انرژی، ارزیابی پزشکی و تغذیه‌ای با اولویت بالا دریافت کنید.",
-    });
+    }, true);
   } else if (Number.isFinite(bmi) && bmi < 18.5) {
     add("professional_review_required", {
       id: "nutrition-bmi-under-18-5",
@@ -151,7 +168,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         ? "BMI محاسبه‌شده کمتر از ۱۸٫۵ است و کاهش بیشتر وزن می‌تواند خطر کمبود تغذیه‌ای را افزایش دهد."
         : "BMI کمتر از ۱۸٫۵ می‌تواند با دریافت ناکافی یا یک علت پزشکی همراه باشد و فقط افزایش کالری پاسخ کافی نیست.",
       nextStep: "علت کم‌وزنی و وضعیت تغذیه‌ای را با پزشک یا متخصص تغذیه بررسی کنید.",
-    });
+    }, form.goal === "weight_loss");
   }
 
   const unintentionalLoss = toNumber(form.unintentionalLossPercent);
@@ -178,7 +195,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         ? "بیش از ۱۰ روز دریافت ناچیز یا تقریباً صفر ثبت شده است. شروع سریع تغذیه می‌تواند نیازمند پایش پزشکی باشد."
         : "بیش از ۱۵٪ کاهش وزن ناخواسته در شش ماه یا کمتر ثبت شده است.",
       nextStep: "افزایش دریافت را خودسرانه و سریع شروع نکنید؛ ارزیابی با اولویت بالا توسط تیم درمانی لازم است.",
-    });
+    }, true);
   } else {
     const secondaryRiskCount = [
       Number.isFinite(bmi) && bmi < 18.5,
@@ -217,7 +234,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         title: "علائم هشدار قلبی، تنفسی یا عصبی گزارش شده است",
         explanation: "درد قفسهٔ سینه، تنگی نفس شدید، ضعف یا بی‌حسی، تغییر دید، اختلال گفتار، گیجی یا غش می‌تواند نیازمند ارزیابی فوری باشد.",
         nextStep: "برنامهٔ غذایی را ادامه ندهید و همین حالا از خدمات اورژانس محلی یا مراقبت پزشکی فوری کمک بگیرید.",
-      });
+      }, true);
     } else if (systolic > 180 || diastolic > 120) {
       add("professional_review_required", {
         id: "bp-severe-reading",
@@ -227,18 +244,34 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         nextStep: "پس از حداقل یک دقیقه و با روش صحیح دوباره اندازه بگیرید. اگر همچنان بالاتر از ۱۸۰/۱۲۰ بود، در اسرع وقت با پزشک یا مرکز درمانی تماس بگیرید.",
       });
     } else if (bp.diagnosedHypertension) {
-      add("general_support_only", {
+      add(bp.stableUnderCare ? "general_support_only" : "professional_review_required", {
         id: "bp-diagnosed-history",
         category: "blood_pressure",
         title: bp.stableUnderCare
-          ? "برنامه فقط نقش حمایتی عمومی دارد"
+          ? "برنامه با الگوی حمایتی فشار خون ساخته می‌شود"
           : "کنترل فشار خون نیازمند هماهنگی حرفه‌ای است",
         explanation: bp.stableUnderCare
-          ? "سابقهٔ فشار خون ثبت شده و وضعیت پایدار و تحت پیگیری اعلام شده است. میزانه جایگزین هدف درمانی یا دارو نیست."
-          : "سابقهٔ فشار خون ثبت شده، اما پایداری و پیگیری حرفه‌ای تأیید نشده است.",
+          ? "سابقهٔ فشار خون ثبت شده و وضعیت پایدار و تحت پیگیری اعلام شده است. غذاهای کم‌سدیم‌تر و الگوی نزدیک به DASH اولویت می‌گیرند، اما میزانه جایگزین هدف درمانی یا دارو نیست."
+          : "سابقهٔ فشار خون ثبت شده، اما پایداری و پیگیری حرفه‌ای تأیید نشده است. برنامه همچنان ساخته می‌شود، ولی باید پیش از اجرا مرور شود.",
         nextStep: bp.stableUnderCare
-          ? "برنامه را فقط در کنار توصیه‌های تیم درمانی استفاده کنید و دارو یا هدف فشار را تغییر ندهید."
-          : "پیش از تکیه بر برنامه، وضعیت و هدف‌های درمانی را با پزشک خود هماهنگ کنید.",
+          ? "برنامه را در کنار توصیه‌های تیم درمانی استفاده کنید و دارو یا هدف فشار را تغییر ندهید."
+          : "برنامهٔ ساخته‌شده را پیش از اجرا با پزشک یا متخصص تغذیه مرور کنید و اندازه‌گیری‌های خانگی را ثبت کنید.",
+      });
+    } else if (systolic >= 140 || diastolic >= 90) {
+      add("professional_review_required", {
+        id: "bp-stage-two-range-reading",
+        category: "blood_pressure",
+        title: "عدد فشار خون واردشده نیازمند پیگیری است",
+        explanation: `عدد واردشده ${Math.round(systolic)}/${Math.round(diastolic)} mmHg است. این عدد به‌تنهایی تشخیص نیست، اما در محدوده‌ای است که تکرار استاندارد اندازه‌گیری و ارزیابی حرفه‌ای اهمیت دارد.`,
+        nextStep: "برنامه با الگوی کم‌سدیم‌تر ساخته می‌شود؛ فشار را در روزهای مختلف با روش صحیح ثبت و نتیجه را با پزشک مرور کنید.",
+      });
+    } else if (systolic >= 130 || diastolic >= 80) {
+      add("general_support_only", {
+        id: "bp-elevated-reading",
+        category: "blood_pressure",
+        title: "فشار خون واردشده بالاتر از محدودهٔ مطلوب است",
+        explanation: "یک عدد منفرد تشخیص نیست. میزانه برای این وضعیت غذاهای کم‌سدیم‌تر و الگوی قلب‌دوست را در اولویت قرار می‌دهد.",
+        nextStep: "اندازه‌گیری را در شرایط استاندارد تکرار کنید و اگر این روند ادامه داشت، با پزشک در میان بگذارید.",
       });
     }
     notices.push("یک اندازه‌گیری منفرد برای تشخیص فشار خون کافی نیست؛ روند و روش اندازه‌گیری اهمیت دارد.");
@@ -257,7 +290,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
           ? "علائم بحران، نیاز به کمک یا نگرانی کتون ثبت شده است؛ برنامهٔ غذایی عمومی برای این وضعیت کافی نیست."
           : `قند معادل حدود ${Math.round(value)} mg/dL است که در محدودهٔ افت قند شدید قرار می‌گیرد.`,
         nextStep: "در صورت علائم شدید یا ناتوانی در درمان افت قند، از خدمات اورژانس محلی کمک بگیرید؛ در غیر این صورت طبق برنامهٔ درمانی شخصی خود عمل و با تیم درمان تماس بگیرید.",
-      });
+      }, true);
     } else if (!isA1c && value > 0 && value < 70) {
       add("professional_review_required", {
         id: "glycaemia-low",
@@ -265,6 +298,21 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         title: "قند خون پایین ثبت شده است",
         explanation: `قند معادل حدود ${Math.round(value)} mg/dL است. این مقدار می‌تواند به غذا، فعالیت یا دارو مرتبط باشد و پیش از تغییر برنامه باید بررسی شود.`,
         nextStep: "طبق دستور درمانی شخصی افت قند عمل کنید و علت این عدد را با پزشک یا تیم دیابت بررسی کنید.",
+      });
+    }
+
+    const highA1c = isA1c && value >= 6.5;
+    const highFasting = !isA1c && glycaemia.measurementType === "fasting" && value >= 126;
+    const highRandom = !isA1c && glycaemia.measurementType === "random" && value >= 200;
+    if (!glycaemia.crisisSymptoms && (highA1c || highFasting || highRandom)) {
+      add("professional_review_required", {
+        id: "glycaemia-high-reading",
+        category: "glycaemia",
+        title: "عدد قند واردشده نیازمند تأیید و پیگیری است",
+        explanation: isA1c
+          ? `A1C واردشده ${glycaemia.value}٪ است. یک نتیجهٔ آزمایش باید با روش معتبر و در صورت نبود علائم واضح، با آزمایش تأییدی تفسیر شود.`
+          : `قند معادل حدود ${Math.round(value)} mg/dL ثبت شده است. نوع و زمان اندازه‌گیری برای تفسیر اهمیت دارد و یک عدد منفرد همیشه تشخیص قطعی نیست.`,
+        nextStep: "برنامه با کربوهیدرات یکنواخت‌تر و کیفیت غذایی بالاتر ساخته می‌شود؛ نتیجه را برای تأیید و تعیین هدف شخصی با پزشک یا تیم دیابت مرور کنید.",
       });
     }
 
@@ -298,7 +346,7 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
         title: "تری‌گلیسرید در محدودهٔ بسیار بالا ثبت شده است",
         explanation: `مقدار معادل حدود ${Math.round(triglycerides)} mg/dL است. این سطح می‌تواند به ارزیابی سریع علت و خطر عوارض نیاز داشته باشد.`,
         nextStep: "پیش از اجرای برنامهٔ عمومی، در کوتاه‌ترین زمان ممکن با پزشک یا مرکز درمانی تماس بگیرید.",
-      });
+      }, true);
     } else if (triglycerides >= 500) {
       add("professional_review_required", {
         id: "lipids-triglycerides-500",
@@ -331,11 +379,11 @@ export function screenSafety(form: PlannerForm): SafetyScreenResult {
 
   return {
     disposition,
-    blocked: priority[disposition] >= priority.professional_review_required,
+    blocked: issues.some((issue) => issue.blocksPlanning),
     issues,
     reasons,
     notices: [...new Set(notices)],
     evaluatedAt: new Date().toISOString(),
-    policyId: "safety.screen.v2",
+    policyId: "safety.screen.v3",
   };
 }

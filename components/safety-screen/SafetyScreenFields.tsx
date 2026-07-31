@@ -12,8 +12,8 @@ import type { ReactNode } from "react";
 const medicalOptions: Array<{ id: MedicalCondition; label: string }> = [
   { id: "kidney_disease", label: "بیماری کلیه نیازمند تنظیم غذا" },
   { id: "liver_disease", label: "بیماری مهم کبدی" },
-  { id: "uncontrolled_diabetes", label: "دیابت کنترل‌نشده یا نیازمند هماهنگی دارو" },
-  { id: "serious_cardiovascular_disease", label: "بیماری جدی قلبی‌عروقی" },
+  { id: "uncontrolled_diabetes", label: "دیابت یا قند خون نیازمند هماهنگی نزدیک‌تر با درمان" },
+  { id: "serious_cardiovascular_disease", label: "سابقهٔ بیماری قلبی‌عروقی یا رژیم تجویزشده" },
   { id: "active_cancer_treatment", label: "درمان فعال سرطان" },
   { id: "recent_major_surgery", label: "جراحی بزرگ اخیر" },
   { id: "severe_gastrointestinal_condition", label: "بیماری شدید گوارشی یا سوءجذب" },
@@ -37,9 +37,9 @@ const dispositionCopy: Record<
     symbol: "i",
   },
   professional_review_required: {
-    label: "فعلاً متوقف",
-    title: "فعلاً برنامهٔ خودکار ساخته نمی‌شود",
-    description: "یک یا چند پاسخ نشان می‌دهد برنامه باید ابتدا با پزشک یا متخصص تغذیه هماهنگ شود. دلیل دقیق و اقدام بعدی پایین آمده است.",
+    label: "هشدار پزشکی",
+    title: "برنامه با ملاحظات محافظه‌کارانه قابل ساخت است",
+    description: "میزانه غذاها را با توجه به اطلاعات ثبت‌شده اولویت‌بندی می‌کند، اما برنامه باید با پزشک یا متخصص تغذیه بازبینی شود.",
     symbol: "!",
   },
   urgent_or_high_priority_assessment: {
@@ -48,6 +48,13 @@ const dispositionCopy: Record<
     description: "پاسخ‌های فعلی می‌تواند نشان‌دهندهٔ وضعیتی باشد که برنامهٔ غذایی نباید رسیدگی به آن را به تأخیر بیندازد.",
     symbol: "!",
   },
+};
+
+const blockedCopy = {
+  label: "فعلاً متوقف",
+  title: "در این وضعیت ساخت برنامهٔ خودکار ایمن نیست",
+  description: "دلیل توقف به‌صورت روشن در پایین آمده است. پاسخ‌ها ذخیره می‌مانند و پس از دریافت راهنمای حرفه‌ای می‌توانید برگردید.",
+  symbol: "!",
 };
 
 const categoryLabels: Record<SafetyIssueCategory, string> = {
@@ -137,7 +144,7 @@ function SafetyIssueCard({ issue }: { issue: SafetyIssue }) {
     <article className={`safety-issue ${urgent ? "is-urgent" : ""}`}>
       <div className="safety-issue__heading">
         <span>{categoryLabels[issue.category]}</span>
-        <strong>{urgent ? "اولویت بالا" : issue.severity === "professional_review_required" ? "نیازمند بررسی" : "پشتیبانی عمومی"}</strong>
+        <strong>{urgent ? "اولویت بالا" : issue.blocksPlanning ? "مانع ساخت برنامه" : issue.severity === "professional_review_required" ? "مشورت جدی توصیه می‌شود" : "پشتیبانی عمومی"}</strong>
       </div>
       <h4>{issue.title}</h4>
       <p>{issue.explanation}</p>
@@ -166,7 +173,9 @@ export function SafetyScreenFields({ form, result, onChange }: Props) {
     });
   }
 
-  const status = dispositionCopy[result.disposition];
+  const status = result.blocked && result.disposition !== "urgent_or_high_priority_assessment"
+    ? blockedCopy
+    : dispositionCopy[result.disposition];
 
   return (
     <section className="safety-screen" aria-labelledby="safety-screen-title">
@@ -175,7 +184,7 @@ export function SafetyScreenFields({ form, result, onChange }: Props) {
           <span className="step-label">بررسی ایمنی پیش از ساخت برنامه</span>
           <h3 id="safety-screen-title">چند سؤال کوتاه دربارهٔ وضعیت سلامت</h3>
           <p className="safety-screen__intro">
-            فقط مواردی را انتخاب کنید که درباره‌شان اطلاع دارید. انتخاب یک مورد به معنی تشخیص نیست؛ هدف این بخش جلوگیری از ساخت برنامهٔ عمومی در موقعیت‌های نامناسب است.
+            فقط مواردی را انتخاب کنید که درباره‌شان اطلاع دارید. سابقهٔ فشار خون، دیابت یا چربی خون معمولاً برنامه را متوقف نمی‌کند؛ میزانه الگوی غذا را محافظه‌کارانه‌تر می‌کند و هم‌زمان مشورت پزشکی را برجسته نشان می‌دهد. فقط نشانه‌های واقعاً پرخطر یا شرایط خارج از دامنه، مانع ساخت برنامه می‌شوند.
           </p>
         </div>
         <span className={`safety-disposition safety-disposition--${result.disposition}`}>
@@ -224,8 +233,8 @@ export function SafetyScreenFields({ form, result, onChange }: Props) {
 
       <details className="safety-details-group">
         <summary>
-          <span>بیماری‌ها و شرایط نیازمند برنامهٔ تخصصی</span>
-          <small>{form.medicalConditions.length > 0 ? `${form.medicalConditions.length.toLocaleString("fa-IR")} مورد انتخاب شده` : "در صورت وجود باز کنید"}</small>
+          <span>شرایط پزشکی و هماهنگی با درمان</span>
+          <small>{form.medicalConditions.length > 0 ? `${form.medicalConditions.length.toLocaleString("fa-IR")} مورد انتخاب شده` : "برای سازگارکردن یا تعیین مرز ایمنی"}</small>
         </summary>
         <div className="check-grid">
           {medicalOptions.map((option) => (

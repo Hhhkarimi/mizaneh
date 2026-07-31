@@ -168,7 +168,7 @@ export type Metrics = {
   warnings: string[];
 };
 
-export type NutrientCompleteness = "complete" | "partial" | "user_entered";
+export type NutrientCompleteness = "complete" | "estimated" | "partial" | "user_entered";
 
 export type FoodState = "raw" | "cooked" | "not_applicable";
 
@@ -183,6 +183,9 @@ export type CustomRecipeIngredient = {
   carbs?: number;
   fat?: number;
   fiber: number;
+  saturatedFat?: number;
+  sodiumMg?: number;
+  addedSugar?: number;
 };
 
 export type CustomRecipeDetails = {
@@ -196,6 +199,9 @@ export type CustomRecipeDetails = {
     carbs?: number;
     fat?: number;
     fiber: number;
+    saturatedFat?: number;
+    sodiumMg?: number;
+    addedSugar?: number;
   };
 };
 
@@ -214,6 +220,9 @@ export type MealTemplate = {
   fat?: number;
   saturatedFat?: number;
   sodiumMg?: number;
+  addedSugar?: number;
+  potassiumMg?: number;
+  nutritionSource?: "catalogue_estimate" | "verified" | "user_entered";
   prep: number;
   batchFriendly: boolean;
   breakfastTaste?: BreakfastTaste;
@@ -232,6 +241,10 @@ export type PlannedMeal = MealTemplate & {
   targetFiber: number;
   targetCarbs?: number;
   targetFat?: number;
+  targetSaturatedFat?: number;
+  targetSodiumMg?: number;
+  targetAddedSugar?: number;
+  targetPotassiumMg?: number;
   portionCue: string;
   portionMultiplier?: number;
   locked?: boolean;
@@ -253,6 +266,10 @@ export type DayPlan = {
   fiber: number;
   carbs?: number;
   fat?: number;
+  saturatedFat?: number;
+  sodiumMg?: number;
+  addedSugar?: number;
+  potassiumMg?: number;
   locked?: boolean;
   nutritionCompleteness?: NutrientCompleteness;
 };
@@ -278,6 +295,7 @@ export type SafetyIssue = {
   title: string;
   explanation: string;
   nextStep: string;
+  blocksPlanning: boolean;
 };
 
 export type SafetyScreenResult = {
@@ -288,7 +306,7 @@ export type SafetyScreenResult = {
   reasons: string[];
   notices: string[];
   evaluatedAt: string;
-  policyId: "safety.screen.v2";
+  policyId: "safety.screen.v3";
 };
 
 export type PlanVersionMetadata = {
