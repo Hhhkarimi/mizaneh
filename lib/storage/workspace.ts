@@ -5,6 +5,7 @@ import { ensurePlanIdentity } from "@/lib/plan/editor";
 import { screenSafety } from "@/lib/safety/screen";
 import type { DayPlan, Goal, Metrics, PlanDocument, PlannerForm } from "@/lib/types";
 import type { StoredSession } from "@/lib/storage/session";
+import { isPersistedDataExpired } from "@/lib/storage/retention";
 
 const WORKSPACE_KEY = "mizaneh:workspace:v2";
 const MAX_PERSISTED_BYTES = 2_000_000;
@@ -168,8 +169,17 @@ export function loadWorkspace(): StoredWorkspace | null {
   if (!target) return null;
   try {
     const raw = target.getItem(WORKSPACE_KEY);
-    if (!raw || raw.length > MAX_PERSISTED_BYTES) return null;
-    return validateWorkspace(JSON.parse(raw));
+    if (!raw) return null;
+    if (raw.length > MAX_PERSISTED_BYTES) {
+      target.removeItem(WORKSPACE_KEY);
+      return null;
+    }
+    const workspace = validateWorkspace(JSON.parse(raw));
+    if (!workspace || isPersistedDataExpired(workspace.savedAt)) {
+      target.removeItem(WORKSPACE_KEY);
+      return null;
+    }
+    return workspace;
   } catch {
     return null;
   }
@@ -187,13 +197,7 @@ export function clearWorkspace(): boolean {
 }
 
 export function hasWorkspace(): boolean {
-  const target = storage();
-  if (!target) return false;
-  try {
-    return target.getItem(WORKSPACE_KEY) !== null;
-  } catch {
-    return false;
-  }
+  return loadWorkspace() !== null;
 }
 
 export function migrateLegacySession(session: StoredSession): StoredWorkspace {
