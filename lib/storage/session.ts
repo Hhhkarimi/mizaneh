@@ -3,6 +3,7 @@
 
 import { defaultForm } from "@/lib/food/catalogue";
 import type { DayPlan, PlanMode, PlannerForm } from "@/lib/types";
+import { isPersistedDataExpired } from "@/lib/storage/retention";
 
 const STORAGE_KEY = "mizaneh:session:v1";
 const SESSION_VERSION = 1 as const;
@@ -137,6 +138,11 @@ export function loadSession(): StoredSession | null {
       storage.removeItem(STORAGE_KEY);
       return null;
     }
+    const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+    if (isPersistedDataExpired(savedAt)) {
+      storage.removeItem(STORAGE_KEY);
+      return null;
+    }
     const form = normalizeForm(parsed.form);
     if (
       !form ||
@@ -158,13 +164,13 @@ export function loadSession(): StoredSession | null {
       planMode: parsed.planMode as PlanMode,
       variationSeed: parsed.variationSeed,
       substitutions,
-      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : new Date().toISOString(),
+      savedAt,
     };
   } catch {
+    try { storage.removeItem(STORAGE_KEY); } catch { /* best-effort cleanup */ }
     return null;
   }
 }
-
 export function clearSession(): boolean {
   const storage = getStorage();
   if (!storage) return false;
@@ -177,11 +183,5 @@ export function clearSession(): boolean {
 }
 
 export function hasSavedSession(): boolean {
-  const storage = getStorage();
-  if (!storage) return false;
-  try {
-    return storage.getItem(STORAGE_KEY) !== null;
-  } catch {
-    return false;
-  }
+  return loadSession() !== null;
 }

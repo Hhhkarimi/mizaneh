@@ -1,23 +1,20 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useMemo } from "react";
 import type {
   AdjustmentProposal,
   Allergy,
   DayPlan,
   Goal,
   MealSlot,
-  Metrics,
   PlannedMeal,
   PlanDocument,
   PlanMode,
   PlannerForm,
-  WeightMeasurement,
 } from "@/lib/types";
 import {
   activityOptions,
   allergyOptions,
-  defaultForm,
   dietStyles,
   exchangeGroups,
   planModeOptions,
@@ -28,7 +25,7 @@ import { calculateMetrics, getValidationMessage } from "@/lib/nutrition/formulas
 import { formatDecimal, formatNumber } from "@/lib/nutrition/format";
 import { applyReviewedEnergyAdjustment, calculateCurrentMetrics, getCalculationScopeIssue } from "@/lib/calculations/policies";
 import { goalCopy } from "@/lib/domain/goals";
-import { buildWeeklyPlan, applySubstitution, getMeal, getSubstituteOptions } from "@/lib/plan/build";
+import { applySubstitution, getMeal, getSubstituteOptions } from "@/lib/plan/build";
 import {
   commitHistory,
   copyDayTo,
@@ -40,7 +37,6 @@ import {
   redoHistory,
   summarizePlan,
   undoHistory,
-  type PlanHistory,
 } from "@/lib/plan/editor";
 import { buildShoppingList } from "@/lib/plan/shopping";
 import { dayPatternLabel, prepLabel, sleepLabel, waterLabel } from "@/lib/labels";
@@ -57,77 +53,29 @@ import { clearSession, saveSession, type StoredSession } from "@/lib/storage/ses
 import { clearWorkspace, saveWorkspace, type StoredWorkspace } from "@/lib/storage/workspace";
 import { getClinicalNutritionProfile } from "@/lib/clinical/diet-profile";
 import { resolveClinicalSources } from "@/lib/clinical/source-registry";
+import { BrandMark } from "@/components/BrandMark";
+import { createPlanDocument } from "@/lib/planner/createPlanDocument";
+import { safeBuildWeeklyPlan } from "@/lib/planner/safeBuildWeeklyPlan";
+import { usePlannerState } from "@/hooks/usePlannerState";
 
 
-function safeBuildWeeklyPlan(form: PlannerForm, metrics: Metrics, mode: PlanMode, variationSeed: number): { plan: DayPlan[]; error: string } {
-  try {
-    return { plan: ensurePlanIdentity(buildWeeklyPlan(form, metrics, mode, variationSeed)), error: "" };
-  } catch (cause) {
-    return {
-      plan: [],
-      error: cause instanceof Error
-        ? cause.message
-        : "برای محدودیت‌های ثبت‌شده برنامهٔ سازگار ساخته نشد. مواد یا محدودیت‌ها را بازبینی کنید.",
-    };
-  }
-}
 
-function BrandMark({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 64 64"
-      role="img"
-      aria-label="نشان میزانه"
-    >
-      <path
-        d="M10 34h44c-1.8 12.7-10.5 20-22 20S11.8 46.7 10 34Z"
-        fill="currentColor"
-      />
-      <path
-        d="M17 34c2-8.2 7-12.3 15-12.3S45 25.8 47 34"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="5"
-      />
-      <path
-        d="M33.8 20.7C34.2 11.7 40.2 7 50 8.3c-.9 8.4-6.2 12.6-16.2 12.4Z"
-        fill="#9dd24b"
-      />
-      <path
-        d="M29.8 20.5c-1.1-6.7-5.4-10.1-12.9-10.3.2 6.8 4.5 10.3 12.9 10.3Z"
-        fill="#ff6b55"
-      />
-      <path d="M18 58h28" stroke="currentColor" strokeLinecap="round" strokeWidth="4" />
-    </svg>
-  );
-}
 
 
 export default function DietPlanner() {
-  const [form, setForm] = useState<PlannerForm>(defaultForm);
-  const [step, setStep] = useState(1);
-  const [error, setError] = useState("");
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [submittedForm, setSubmittedForm] = useState<PlannerForm | null>(null);
-  const [planMode, setPlanMode] = useState<PlanMode>("variety");
-  const [variationSeed, setVariationSeed] = useState(1);
-  const [activeDay, setActiveDay] = useState(0);
-  const [copyState, setCopyState] = useState<"idle" | "done">("idle");
-  const [planHistory, setPlanHistory] = useState<PlanHistory | null>(null);
-  const [baselinePlan, setBaselinePlan] = useState<DayPlan[]>([]);
-  const [archivedPlans, setArchivedPlans] = useState<PlanDocument[]>([]);
-  const [activePlanId, setActivePlanId] = useState(() => `plan-${Date.now()}`);
-  const [activePlanCreatedAt, setActivePlanCreatedAt] = useState(() => new Date().toISOString());
-  const [pendingGoal, setPendingGoal] = useState<{ goal: Goal; source: "guided" | "direct" } | null>(null);
-  const [liveAnnouncement, setLiveAnnouncement] = useState("");
-  const [measurements, setMeasurements] = useState<WeightMeasurement[]>([]);
-  const [adjustmentProposal, setAdjustmentProposal] = useState<AdjustmentProposal | null>(null);
-  const [lastAdjustmentAt, setLastAdjustmentAt] = useState<string | undefined>(undefined);
-  const [startingTargetCalories, setStartingTargetCalories] = useState<number | null>(null);
-  const [comparisonPlanId, setComparisonPlanId] = useState<string | null>(null);
-  const resultsRef = useRef<HTMLElement>(null);
+  const {
+    form, setForm, step, setStep, error, setError, metrics, setMetrics,
+    submittedForm, setSubmittedForm, planMode, setPlanMode,
+    variationSeed, setVariationSeed, activeDay, setActiveDay, copyState, setCopyState,
+    planHistory, setPlanHistory, baselinePlan, setBaselinePlan,
+    archivedPlans, setArchivedPlans, activePlanId, setActivePlanId,
+    activePlanCreatedAt, setActivePlanCreatedAt, pendingGoal, setPendingGoal,
+    liveAnnouncement, setLiveAnnouncement, measurements, setMeasurements,
+    adjustmentProposal, setAdjustmentProposal, lastAdjustmentAt, setLastAdjustmentAt,
+    startingTargetCalories, setStartingTargetCalories, comparisonPlanId, setComparisonPlanId,
+    substitutionTarget, setSubstitutionTarget, savedAt, setSavedAt,
+    justSaved, setJustSaved, resultsRef,
+  } = usePlannerState();
 
   const previewMetrics = useMemo(() => calculateCurrentMetrics(form), [form]);
   const safetyResult = useMemo(() => screenSafety(form), [form]);
@@ -160,10 +108,6 @@ export default function DietPlanner() {
     [comparisonPlan],
   );
 
-  const [substitutionTarget, setSubstitutionTarget] = useState<{
-    slot: MealSlot;
-    occurrence: number;
-  } | null>(null);
   const substituteOptions = useMemo(() => {
     if (!substitutionTarget || !selectedDay) return [];
     return getSubstituteOptions(
@@ -202,33 +146,25 @@ export default function DietPlanner() {
     setSubstitutionTarget(null);
   }
 
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
 
   function currentPlanDocument(name = "برنامهٔ فعال", id = activePlanId, parentPlanId = archivedPlans.at(-1)?.id ?? null): PlanDocument | null {
-    if (!metrics || !submittedForm || displayedPlan.length === 0) return null;
-    const now = new Date().toISOString();
-    return {
-      schemaVersion: 2,
+    return createPlanDocument({
+      metrics,
+      submittedForm,
+      displayedPlan,
+      name,
       id,
       parentPlanId,
-      name,
-      goal: submittedForm.goal,
-      form: structuredClone(submittedForm),
-      safetyScreen: screenSafety(submittedForm),
-      calculation: structuredClone(metrics),
-      startingTargetCalories: startingTargetCalories ?? metrics.targetCalories,
+      activePlanId,
+      activePlanCreatedAt,
+      archivedPlans,
+      startingTargetCalories,
       planMode,
       variationSeed,
-      days: structuredClone(displayedPlan),
-      versions: archivedPlans.map((plan) => ({ id: plan.id, name: plan.name, goal: plan.goal, createdAt: plan.createdAt, parentPlanId: plan.parentPlanId })),
-      measurements: structuredClone(measurements),
-      adjustmentProposals: adjustmentProposal ? [structuredClone(adjustmentProposal)] : [],
+      measurements,
+      adjustmentProposal,
       lastAdjustmentAt,
-      createdAt: id === activePlanId ? activePlanCreatedAt : now,
-      updatedAt: now,
-      legacy: metrics.policy.evidenceCertainty === "legacy",
-    };
+    });
   }
 
   function handleSaveSession() {
