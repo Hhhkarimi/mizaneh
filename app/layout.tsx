@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/vazirmatn";
 import "./globals.css";
+import "./ui-refinement.css";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;

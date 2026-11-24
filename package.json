@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:policy-review": "node scripts/check-policy-review.mjs",
-    "verify": "npm run lint && npm run test:coverage && npm run check:architecture && npm run check:policy-review && npm run build"
+    "verify": "npm run lint && npm run test:coverage && npm run check:architecture && npm run check:policy-review && npm run build",
+    "build:offline": "node scripts/build-offline.mjs"
   },
   "dependencies": {
     "@fontsource-variable/vazirmatn": "5.3.0",

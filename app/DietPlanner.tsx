@@ -624,7 +624,7 @@ export default function DietPlanner() {
           </p>
           <h1>
             برنامه غذایی
-            <br />
+            <br />{" "}
             <em>متعادل</em> و هفتگی
           </h1>
           <p className="hero-lead">
@@ -695,8 +695,10 @@ export default function DietPlanner() {
                       : ""
                 }
                 key={item}
+                aria-current={item === step ? "step" : undefined}
               >
                 <span>{formatNumber(item)}</span>
+                <span className="stepper-name">{stepTitles[item - 1]}</span>
               </li>
             ))}
           </ol>
@@ -1240,7 +1242,9 @@ export default function DietPlanner() {
               </section>
             )}
 
-            <article className="result-block numbers-block">
+            <nav className="result-jump-nav" aria-label="دسترسی به بخش‌های برنامه"><a href="#daily-numbers">اعداد روزانه</a><a href="#nutrition-targets">هدف‌های تغذیه‌ای</a><a href="#weekly-plan">برنامهٔ هفتگی</a><a href="#day-details">جزئیات وعده‌ها</a><a href="#shopping-list">فهرست خرید</a><a href="#progress">پیگیری روند</a></nav>
+
+            <article className="result-block numbers-block" id="daily-numbers">
               <div className="block-heading">
                 <span>۰۱</span>
                 <div>
@@ -1280,7 +1284,7 @@ export default function DietPlanner() {
               <div className="calculation-disclosure"><strong>این عدد نسخهٔ پزشکی یا نتیجهٔ تضمین‌شده نیست.</strong><span>معادله: {metrics.policy.energyEquationId} — بازبینی تا {metrics.policy.reviewExpiresAt}</span>{metrics.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>
             </article>
 
-            <article className="result-block nutrition-block">
+            <article className="result-block nutrition-block" id="nutrition-targets">
               <div className="block-heading">
                 <span>۰۲</span>
                 <div>
@@ -1417,6 +1421,8 @@ export default function DietPlanner() {
                 <p>{planSummary.nutritionCompleteness === "complete" ? "داده‌های تغذیه‌ای کامل‌اند." : planSummary.nutritionCompleteness === "estimated" ? "مقادیر کاتالوگ برآوردی‌اند؛ برند، نمک، روغن و روش پخت می‌تواند نتیجهٔ واقعی را تغییر دهد." : planSummary.nutritionCompleteness === "user_entered" ? "خلاصه شامل داده‌های واردشده توسط کاربر است." : "اطلاعات تغذیه‌ای برخی غذاها ناقص است."}</p>
               </div>
 
+              <nav className="day-selector" aria-label="انتخاب روز برای جزئیات">{displayedPlan.map((day, index) => <button key={day.id} type="button" aria-pressed={activeDay === index} onClick={() => setActiveDay(index)}>{day.label}</button>)}</nav>
+
               <div className="weekly-table-wrap">
                 <table className="weekly-table">
                   <thead>
@@ -1468,7 +1474,7 @@ export default function DietPlanner() {
               </div>
 
               {selectedDay && (
-                <div className="day-detail" aria-live="polite">
+                <div className="day-detail" id="day-details" aria-live="polite">
                   <div className="day-summary">
                     <div>
                       <p>جزئیات {selectedDay.label}</p>
@@ -1610,7 +1616,7 @@ export default function DietPlanner() {
               </div>
             </article>
 
-            <article className="result-block shopping-block">
+            <article className="result-block shopping-block" id="shopping-list">
               <div className="block-heading block-heading--controls">
                 <span>۰۵</span>
                 <div>
@@ -1685,7 +1691,7 @@ export default function DietPlanner() {
               </div>
             </article>
 
-            <article className="result-block progress-block">
+            <article className="result-block progress-block" id="progress">
               <ProgressTracker
                 goal={submittedForm.goal}
                 measurements={measurements}
